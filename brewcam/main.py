@@ -11,6 +11,7 @@ from brewcam.sensors import simulated
 from brewcam.utils.clock import utc_now
 from brewcam.video import overlay_text
 from brewcam.video import video
+from brewcam.video import youtube
 
 
 def run(config_path: str) -> None:
@@ -33,6 +34,11 @@ def run(config_path: str) -> None:
     snapshot_path = Path(config.monitoring["directory"]).parent / "runtime" / "camera_preview.jpg"
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
     overlay_text_path = snapshot_path.parent / "overlay.txt"
+
+    def _stop_video() -> None:
+        leg_active = youtube.leg_was_active(video_state.running_source, config.stream)
+        video.stop(video_state, leg_active, config.monitoring["directory"], now_local,
+                   config.monitoring["retention_days"])
 
     try:
         while not stop:
@@ -74,7 +80,7 @@ def run(config_path: str) -> None:
 
             time.sleep(1)
     except Exception as exc:
-        video.stop(video_state)
+        _stop_video()
         monitoring.write_event(
             config.monitoring["directory"],
             now_local,
@@ -84,7 +90,7 @@ def run(config_path: str) -> None:
         )
         raise
 
-    video.stop(video_state)
+    _stop_video()
     monitoring.write_event(
         config.monitoring["directory"],
         now_local,

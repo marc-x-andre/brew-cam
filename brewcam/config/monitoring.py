@@ -21,6 +21,7 @@ def build_snapshot_record(
         "video": {
             "background": video_status["background_mode"],
             "ffmpeg_running": video_status["ffmpeg_running"],
+            "youtube": video_status["youtube"],
         },
         "sensors": {
             "temperature": {

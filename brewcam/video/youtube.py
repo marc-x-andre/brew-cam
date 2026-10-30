@@ -40,6 +40,18 @@ def redact_stderr(text: str) -> str:
     return re.sub(r"rtmps?://\S+", "rtmps://<redacted>", text)
 
 
+def leg_was_active(running_source: dict | None, stream_config: dict) -> bool:
+    """Best-effort check, for the clean-shutdown path, of whether a YouTube leg was
+    attached to the just-stopped process. Degrades to False on misconfiguration,
+    matching resolve_or_degrade's degrade pattern."""
+    if running_source != {"mode": "camera"}:
+        return False
+    try:
+        return resolve_youtube_target(stream_config) is not None
+    except YoutubeConfigError:
+        return False
+
+
 def resolve_or_degrade(state, stream_config: dict, monitoring_dir: str, now_local, retention_days: int):
     """Resolve the YouTube target, degrading to None (and logging once) on misconfiguration."""
     try:

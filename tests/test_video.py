@@ -350,6 +350,16 @@ def test_stop_terminates_a_running_process():
     assert state.process is None
 
 
+def test_stop_logs_streaming_stopped_when_a_youtube_leg_was_active(tmp_path):
+    from brewcam.video.video import stop
+
+    process = MagicMock(poll=MagicMock(return_value=None), terminate=MagicMock(), wait=MagicMock())
+    state = VideoState(process=process, running_source={"mode": "camera"})
+    stop(state, youtube_leg_active=True, monitoring_dir=str(tmp_path / "logs"), now_local=NOW, retention_days=30)
+    logged = "\n".join(p.read_text() for p in (tmp_path / "logs").glob("*.jsonl"))
+    assert '"streaming_stopped"' in logged
+
+
 def test_tick_survives_the_snapshot_file_disappearing_mid_check(tmp_path, monkeypatch):
     # Found in review: watch_running_process calls snapshot_path.stat() without
     # catching OSError. If the file vanishes between .exists() and .stat() (e.g.
@@ -411,6 +421,19 @@ def test_tick_reports_youtube_leg_active_once_configured(tmp_path, monkeypatch):
         status = tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
                        tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
     assert status["youtube"] == {"configured": True, "leg_active": True}
+
+
+def test_process_exit_with_youtube_leg_active_logs_streaming_failed_not_camera_disconnected(tmp_path, monkeypatch):
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    monkeypatch.setenv("YOUTUBE_INGEST_URL", "rtmps://a.rtmps.youtube.com/live2")
+    monkeypatch.setenv("YOUTUBE_STREAM_KEY", "k")
+    state = VideoState(process=MagicMock(poll=MagicMock(return_value=1), stderr=MagicMock(read=MagicMock(return_value=b""))),
+                        status="connected", running_source={"mode": "camera"}, process_started_at=NOW, connected_since=NOW)
+    tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+         tmp_path / "snap.jpg", NOW + timedelta(seconds=1), NOW + timedelta(seconds=1), str(tmp_path / "logs"), 30)
+    logged = "\n".join(p.read_text() for p in (tmp_path / "logs").glob("*.jsonl"))
+    assert '"streaming_failed"' in logged
+    assert '"camera_disconnected"' not in logged
 
 
 # --- start_camera_attempt / start_filler (Task 4, Step 2) ---

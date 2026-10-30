@@ -7,6 +7,7 @@ from brewcam.schedule import StageState
 from brewcam.video import background, youtube
 from brewcam.video.starter import start_camera_attempt, start_filler
 from brewcam.video.state import VideoState
+from brewcam.video.stopper import stop
 from brewcam.video.supervisor import watch_running_process
 
 __all__ = ["VideoState", "tick", "stop"]
@@ -42,7 +43,9 @@ def tick(
         desired = configured_mode
 
     if state.running_source == {"mode": "camera"} and desired == {"mode": "camera"}:
-        watch_running_process(state, snapshot_path, now, now_local, monitoring_dir, retention_days)
+        watch_running_process(
+            state, snapshot_path, now, now_local, monitoring_dir, retention_days, youtube_target is not None,
+        )
         if state.process is None:  # just failed/stalled this tick — keep the preview fresh immediately
             start_filler(
                 state, {"mode": "black"}, stream_config, overlay_text_path, snapshot_path,
@@ -86,15 +89,3 @@ def tick(
             "leg_active": youtube_target is not None and state.process is not None,
         },
     }
-
-
-def stop(state: VideoState) -> None:
-    if state.process is None:
-        return
-    state.process.terminate()
-    try:
-        state.process.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        state.process.kill()
-    state.process = None
-    state.running_source = None

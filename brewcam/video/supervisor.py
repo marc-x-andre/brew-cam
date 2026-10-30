@@ -17,6 +17,16 @@ def _stderr_excerpt(process) -> str:
     return "\n".join(stderr_text.splitlines()[-20:])
 
 
+def _log_failure_and_retry(
+    monitoring_dir, now_local, retention_days, youtube_leg_was_active, delay, event_name, details
+) -> None:
+    monitoring.write_event(monitoring_dir, now_local, event_name, details, retention_days)
+    if youtube_leg_was_active:
+        monitoring.write_event(
+            monitoring_dir, now_local, "streaming_retry", {"delay_seconds": delay}, retention_days
+        )
+
+
 def watch_running_process(
     state: VideoState,
     snapshot_path: Path,
@@ -24,6 +34,7 @@ def watch_running_process(
     now_local: datetime,
     monitoring_dir: str,
     retention_days: int,
+    youtube_leg_was_active: bool = False,
 ) -> None:
     if state.process.poll() is not None:
         previous_status = state.status
@@ -31,15 +42,22 @@ def watch_running_process(
         state.process = None
         state.status = "unavailable"
         state.failure_count += 1
-        state.next_restart_at = now + timedelta(seconds=backoff_seconds(state.failure_count))
+        delay = backoff_seconds(state.failure_count)
+        state.next_restart_at = now + timedelta(seconds=delay)
         if previous_status in ("connected", "stalled"):
-            monitoring.write_event(
-                monitoring_dir, now_local, "camera_disconnected", {"excerpt": excerpt}, retention_days
+            event_name = "streaming_failed" if youtube_leg_was_active else "camera_disconnected"
+            _log_failure_and_retry(
+                monitoring_dir, now_local, retention_days, youtube_leg_was_active, delay,
+                event_name, {"excerpt": excerpt},
             )
         elif previous_status == "connecting":
-            monitoring.write_event(
-                monitoring_dir, now_local, "camera_reconnecting",
-                {"failure_count": state.failure_count, "excerpt": excerpt}, retention_days,
+            event_name = "streaming_failed" if youtube_leg_was_active else "camera_reconnecting"
+            details = (
+                {"excerpt": excerpt} if youtube_leg_was_active
+                else {"failure_count": state.failure_count, "excerpt": excerpt}
+            )
+            _log_failure_and_retry(
+                monitoring_dir, now_local, retention_days, youtube_leg_was_active, delay, event_name, details
             )
         return
 
@@ -58,6 +76,8 @@ def watch_running_process(
             state.status = "connected"
             state.connected_since = now
             monitoring.write_event(monitoring_dir, now_local, "camera_connected", {}, retention_days)
+            if youtube_leg_was_active:
+                monitoring.write_event(monitoring_dir, now_local, "streaming_recovered", {}, retention_days)
         elif (now - state.connected_since).total_seconds() >= HEALTHY_RESET_SECONDS:
             state.failure_count = 0
         return
@@ -68,5 +88,9 @@ def watch_running_process(
         state.process = None
         state.status = "stalled"
         state.failure_count += 1
-        state.next_restart_at = now + timedelta(seconds=backoff_seconds(state.failure_count))
-        monitoring.write_event(monitoring_dir, now_local, "camera_stalled", {}, retention_days)
+        delay = backoff_seconds(state.failure_count)
+        state.next_restart_at = now + timedelta(seconds=delay)
+        event_name = "streaming_failed" if youtube_leg_was_active else "camera_stalled"
+        _log_failure_and_retry(
+            monitoring_dir, now_local, retention_days, youtube_leg_was_active, delay, event_name, {}
+        )

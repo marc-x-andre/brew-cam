@@ -49,13 +49,19 @@ def test_retention_deletes_files_older_than_window(tmp_path):
 
 def test_build_snapshot_record_shape():
     record = build_snapshot_record(
-        NOW, OVERLAY, {"background_mode": "black", "ffmpeg_running": False}, TEMPERATURE
+        NOW, OVERLAY,
+        {"background_mode": "black", "ffmpeg_running": False,
+         "youtube": {"configured": False, "leg_active": False}},
+        TEMPERATURE,
     )
     assert record["event_type"] == "snapshot"
     assert record["schema_version"] == SCHEMA_VERSION
     assert record["session"]["stage"] == "Mash"
     assert record["session"]["progress_pct"] == 10.0
-    assert record["video"] == {"background": "black", "ffmpeg_running": False}
+    assert record["video"] == {
+        "background": "black", "ffmpeg_running": False,
+        "youtube": {"configured": False, "leg_active": False},
+    }
     assert record["sensors"]["temperature"] == {
         "value": 20.0,
         "unit": "C",
@@ -64,10 +70,18 @@ def test_build_snapshot_record_shape():
     }
 
 
+def test_build_snapshot_record_includes_youtube_status():
+    video_status = {"background_mode": "camera", "ffmpeg_running": True,
+                     "youtube": {"configured": True, "leg_active": True}}
+    record = build_snapshot_record(NOW, OVERLAY, video_status, TEMPERATURE)
+    assert record["video"]["youtube"] == {"configured": True, "leg_active": True}
+
+
 def test_snapshot_record_preserves_stale_vs_unavailable_distinction():
     stale = SensorReading("temperature", 20.0, "C", NOW, "stale")
     unavailable = SensorReading("temperature", None, "C", None, "unavailable")
-    video_status = {"background_mode": "black", "ffmpeg_running": False}
+    video_status = {"background_mode": "black", "ffmpeg_running": False,
+                     "youtube": {"configured": False, "leg_active": False}}
 
     stale_record = build_snapshot_record(NOW, OVERLAY, video_status, stale)
     unavailable_record = build_snapshot_record(NOW, OVERLAY, video_status, unavailable)
@@ -79,7 +93,8 @@ def test_snapshot_record_preserves_stale_vs_unavailable_distinction():
 
 
 def test_snapshot_record_ignores_unexpected_fields_that_could_carry_secrets():
-    leaky_status = {"background_mode": "black", "ffmpeg_running": False, "stream_key": "super-secret"}
+    leaky_status = {"background_mode": "black", "ffmpeg_running": False, "stream_key": "super-secret",
+                     "youtube": {"configured": False, "leg_active": False}}
     record = build_snapshot_record(NOW, OVERLAY, leaky_status, TEMPERATURE)
     assert "super-secret" not in str(record)
     assert "stream_key" not in record["video"]
@@ -97,7 +112,8 @@ def test_write_snapshot_appends_to_todays_file(tmp_path):
         str(tmp_path),
         NOW,
         OVERLAY,
-        {"background_mode": "black", "ffmpeg_running": False},
+        {"background_mode": "black", "ffmpeg_running": False,
+         "youtube": {"configured": False, "leg_active": False}},
         retention_days=30,
         temperature=TEMPERATURE,
     )
