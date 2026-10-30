@@ -129,8 +129,13 @@ Camera ingestion from a real Wyze Cam V2, via Docker Wyze Bridge, is now
 live: Brewcam supervises an FFmpeg subprocess reading the RTSP feed over
 TCP (no audio), recovers from an unavailable camera, a stalled input, or a
 dropped connection, and writes a refreshing local JPEG snapshot for manual
-verification. Video compositing (burning overlays/backgrounds onto the
-video) and YouTube publishing are **not yet implemented** — there is no
-`filters.py` or `youtube.py` yet, and nothing in this repo publishes a
-stream anywhere. ThermoPro sensor integration also remains a stub; the
-temperature readings are still simulated.
+verification.
+
+Video compositing is now implemented and locally verified: background-mode
+switching (camera, static image, and black-screen fallback) and overlay
+text burn-in all run through a real FFmpeg pipeline, confirmed via
+synthetic-source automated tests as well as manual verification against the
+composited output. YouTube publishing is **not yet implemented** — there is
+no `youtube.py` yet, and nothing in this repo publishes a stream anywhere.
+ThermoPro sensor integration also remains a stub; the temperature readings
+are still simulated.
