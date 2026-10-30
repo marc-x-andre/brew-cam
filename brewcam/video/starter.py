@@ -18,6 +18,7 @@ def start_camera_attempt(
     now_local: datetime,
     monitoring_dir: str,
     retention_days: int,
+    youtube_target=None,
 ) -> None:
     try:
         rtsp_url = resolve_rtsp_url(camera_config)
@@ -30,10 +31,10 @@ def start_camera_attempt(
         return
 
     command = filters.build_compose_command(
-        {"mode": "camera"}, rtsp_url, overlay_text_path, stream_config, snapshot_path
+        {"mode": "camera"}, rtsp_url, overlay_text_path, stream_config, snapshot_path, youtube_target
     )
     try:
-        state.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        state.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         try:
             existing_mtime = snapshot_path.stat().st_mtime
         except OSError:
@@ -62,10 +63,13 @@ def start_filler(
     now_local: datetime,
     monitoring_dir: str,
     retention_days: int,
+    youtube_target=None,
 ) -> None:
-    command = filters.build_compose_command(target_mode, None, overlay_text_path, stream_config, snapshot_path)
+    command = filters.build_compose_command(
+        target_mode, None, overlay_text_path, stream_config, snapshot_path, youtube_target
+    )
     try:
-        state.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        state.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
         state.running_source = target_mode
     except OSError:
         state.running_source = None

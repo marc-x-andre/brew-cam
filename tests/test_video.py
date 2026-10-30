@@ -24,6 +24,8 @@ ACTIVE_NO_OVERRIDE = Step(name="s", description="d", start=None, end=None,
 SCHEDULE_ACTIVE = StageState(stage=ACTIVE_NO_OVERRIDE, status="active", stage_progress_pct=0, overall_progress_pct=0)
 IMAGE_SESSION = SessionConfig(name="T", timezone="UTC", background={"mode": "image", "path": "assets/standby.png"},
                                before={"mode": "black"}, after={"mode": "black"})
+STREAM_YOUTUBE = {**STREAM, "destination": "youtube", "ingest_url_env": "YOUTUBE_INGEST_URL",
+                  "key_env": "YOUTUBE_STREAM_KEY"}
 
 
 def test_resolve_rtsp_url_reads_named_env_var(monkeypatch):
@@ -91,7 +93,7 @@ def test_tick_starts_ffmpeg_when_camera_source_configured(tmp_path, monkeypatch)
     state = VideoState()
     snapshot_path = tmp_path / "snap.jpg"
     with patch("brewcam.video.video.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         status = tick(state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
                        snapshot_path, NOW, NOW, str(tmp_path / "logs"), 30)
     mock_popen.assert_called_once()
@@ -109,7 +111,8 @@ def test_tick_reports_unavailable_without_starting_process_when_env_var_missing(
                        snapshot_path, NOW, NOW, str(tmp_path / "logs"), 30)
     mock_popen.assert_not_called()
     assert state.status == "unavailable"
-    assert status == {"background_mode": "black", "ffmpeg_running": False}
+    assert status == {"background_mode": "black", "ffmpeg_running": False,
+                       "youtube": {"configured": False, "leg_active": False}}
 
 
 def test_tick_never_raises_when_camera_unavailable(tmp_path, monkeypatch):
@@ -120,7 +123,8 @@ def test_tick_never_raises_when_camera_unavailable(tmp_path, monkeypatch):
 
 
 def _running_process():
-    return MagicMock(poll=MagicMock(return_value=None), terminate=MagicMock(), kill=MagicMock(), wait=MagicMock())
+    return MagicMock(poll=MagicMock(return_value=None), terminate=MagicMock(), kill=MagicMock(), wait=MagicMock(),
+                      stderr=MagicMock(read=MagicMock(return_value=b"")))
 
 
 def test_tick_transitions_to_connected_once_snapshot_file_updated(tmp_path, monkeypatch):
@@ -135,7 +139,8 @@ def test_tick_transitions_to_connected_once_snapshot_file_updated(tmp_path, monk
         NOW + timedelta(seconds=2), NOW + timedelta(seconds=2), str(tmp_path / "logs"), 30,
     )
     assert state.status == "connected"
-    assert status == {"background_mode": "camera", "ffmpeg_running": True}
+    assert status == {"background_mode": "camera", "ffmpeg_running": True,
+                       "youtube": {"configured": False, "leg_active": False}}
 
 
 def test_tick_ignores_a_snapshot_left_over_from_a_previous_run(tmp_path, monkeypatch):
@@ -168,7 +173,7 @@ def test_tick_detects_stall_and_schedules_a_restart(tmp_path, monkeypatch):
     # "state.process is None" fallback branch) — the filler's Popen call must be
     # mocked here too, since it now fires as part of this tick.
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         tick(state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt", snapshot_path,
              later, later, str(tmp_path / "logs"), 30)
     process.terminate.assert_called_once()
@@ -191,7 +196,7 @@ def test_tick_times_out_a_connecting_process_that_never_produces_a_frame(tmp_pat
     # Task 4: the immediate black-filler fallback fires here too (see above) —
     # its Popen call must be mocked.
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         tick(state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
              tmp_path / "snap.jpg", later, later, str(tmp_path / "logs"), 30)
     process.terminate.assert_called_once()
@@ -225,7 +230,7 @@ def test_camera_death_and_filler_start_failure_in_the_same_tick_does_not_crash_l
     # watch_running_process on a None process, raising AttributeError on every
     # subsequent tick — an unrecoverable crash loop.
     monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
-    exited_process = MagicMock(poll=MagicMock(return_value=1))
+    exited_process = MagicMock(poll=MagicMock(return_value=1), stderr=MagicMock(read=MagicMock(return_value=b"")))
     state = VideoState(process=exited_process, status="connected", process_started_at=NOW,
                         connected_since=NOW, running_source={"mode": "camera"})
     with patch("brewcam.video.starter.subprocess.Popen", side_effect=OSError("ffmpeg missing")):
@@ -236,7 +241,7 @@ def test_camera_death_and_filler_start_failure_in_the_same_tick_does_not_crash_l
     assert state.running_source is None  # must not be stuck at {"mode": "camera"} with no process
     # the next tick must not raise, even with the camera still unresolved
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         tick(state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
              tmp_path / "snap.jpg", NOW + timedelta(seconds=2), NOW + timedelta(seconds=2),
              str(tmp_path / "logs"), 30)  # must not raise AttributeError
@@ -279,7 +284,8 @@ def test_tick_logs_an_event_when_a_just_started_process_exits_immediately(tmp_pa
     # misconfiguration indistinguishable from "still connecting".
     monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
     exited_process = MagicMock(
-        poll=MagicMock(return_value=1), terminate=MagicMock(), kill=MagicMock(), wait=MagicMock()
+        poll=MagicMock(return_value=1), terminate=MagicMock(), kill=MagicMock(), wait=MagicMock(),
+        stderr=MagicMock(read=MagicMock(return_value=b"")),
     )
     state = VideoState(process=exited_process, status="connecting", process_started_at=NOW,
                         running_source={"mode": "camera"})
@@ -287,7 +293,7 @@ def test_tick_logs_an_event_when_a_just_started_process_exits_immediately(tmp_pa
     # Task 4: the immediate black-filler fallback fires once this process is
     # detected as exited — its Popen call must be mocked.
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         tick(
             state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt", tmp_path / "snap.jpg",
             NOW + timedelta(seconds=1), NOW + timedelta(seconds=1), str(log_dir), 30,
@@ -341,6 +347,44 @@ def test_tick_survives_the_snapshot_file_disappearing_mid_check(tmp_path, monkey
          NOW + timedelta(seconds=1), NOW + timedelta(seconds=1), str(tmp_path / "logs"), 30)
 
 
+# --- YouTube target resolution (Task 3) ---
+
+
+def test_tick_reports_youtube_not_configured_by_default(tmp_path, monkeypatch):
+    monkeypatch.delenv("CAMERA_SOURCE", raising=False)
+    state = VideoState()
+    status = tick(state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+                   tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
+    assert status["youtube"] == {"configured": False, "leg_active": False}
+
+
+def test_tick_degrades_to_jpeg_only_when_youtube_env_vars_missing(tmp_path, monkeypatch):
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    monkeypatch.delenv("YOUTUBE_INGEST_URL", raising=False)
+    monkeypatch.delenv("YOUTUBE_STREAM_KEY", raising=False)
+    state = VideoState()
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock())
+        status = tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+                       tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
+    assert status["youtube"] == {"configured": False, "leg_active": False}
+    assert status["ffmpeg_running"] is True  # camera/filler still runs — YouTube failure never blocks local output
+    logged = "\n".join(p.read_text() for p in (tmp_path / "logs").glob("*.jsonl"))
+    assert '"youtube_unavailable"' in logged
+
+
+def test_tick_reports_youtube_leg_active_once_configured(tmp_path, monkeypatch):
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    monkeypatch.setenv("YOUTUBE_INGEST_URL", "rtmps://a.rtmps.youtube.com/live2")
+    monkeypatch.setenv("YOUTUBE_STREAM_KEY", "k")
+    state = VideoState()
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock())
+        status = tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+                       tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
+    assert status["youtube"] == {"configured": True, "leg_active": True}
+
+
 # --- start_camera_attempt / start_filler (Task 4, Step 2) ---
 
 
@@ -348,7 +392,7 @@ def test_start_camera_attempt_starts_process_and_sets_running_source(tmp_path, m
     monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
     state = VideoState()
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         start_camera_attempt(state, CAMERA_CONFIG, STREAM, tmp_path / "overlay.txt", tmp_path / "snap.jpg",
                               NOW, NOW, str(tmp_path / "logs"), 30)
     mock_popen.assert_called_once()
@@ -369,7 +413,7 @@ def test_start_camera_attempt_degrades_when_env_var_missing(tmp_path, monkeypatc
 def test_start_filler_starts_process_and_sets_running_source(tmp_path):
     state = VideoState()
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         start_filler(state, {"mode": "black"}, STREAM, tmp_path / "overlay.txt", tmp_path / "snap.jpg",
                       NOW, str(tmp_path / "logs"), 30)
     mock_popen.assert_called_once()
@@ -393,12 +437,12 @@ def test_camera_falling_back_to_black_is_retried_on_the_backoff_schedule_not_aba
         status = _tick(state, NOW, tmp_path)
     assert state.running_source is None  # camera attempt failed to even start
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         status = _tick(state, NOW + timedelta(seconds=1), tmp_path)  # before backoff elapses: filler only
     assert status["background_mode"] == "black"
     assert state.running_source == {"mode": "black"}
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         status = _tick(state, state.next_restart_at, tmp_path)  # backoff elapsed: camera retried
     assert state.running_source == {"mode": "camera"}
 
@@ -407,7 +451,7 @@ def test_connecting_camera_is_not_torn_down_before_the_stall_timeout(tmp_path, m
     monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
     state = VideoState()
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         _tick(state, NOW, tmp_path)
     assert state.status == "connecting"
     process_from_first_tick = state.process
@@ -417,13 +461,13 @@ def test_connecting_camera_is_not_torn_down_before_the_stall_timeout(tmp_path, m
 
 def test_step_boundary_away_from_camera_switches_immediately_even_while_connected(tmp_path, monkeypatch):
     monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
-    state = VideoState(process=MagicMock(poll=MagicMock(return_value=None)), status="connected",
+    state = VideoState(process=MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b""))), status="connected",
                         running_source={"mode": "camera"}, process_started_at=NOW, connected_since=NOW)
     image_schedule = StageState(stage=Step(name="s2", description="d", start=None, end=None,
                                             target_temperature_c=None, background={"mode": "image", "path": "assets/standby.png"}),
                                  status="active", stage_progress_pct=0, overall_progress_pct=0)
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         status = tick(state, {"source_env": "CAMERA_SOURCE"}, STREAM, SESSION, image_schedule,
                        tmp_path / "overlay.txt", tmp_path / "snap.jpg", NOW + timedelta(seconds=5),
                        NOW + timedelta(seconds=5), str(tmp_path / "logs"), 30)
@@ -438,10 +482,10 @@ def test_filler_process_dying_is_noticed_and_restarted_the_same_tick(tmp_path):
     # catch this and restart it, same as a step-boundary mode change would.
     black_session = SessionConfig(name="T", timezone="UTC", background={"mode": "black"},
                                    before={"mode": "black"}, after={"mode": "black"})
-    exited_filler = MagicMock(poll=MagicMock(return_value=1))
+    exited_filler = MagicMock(poll=MagicMock(return_value=1), stderr=MagicMock(read=MagicMock(return_value=b"")))
     state = VideoState(process=exited_filler, running_source={"mode": "black"})
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         status = tick(state, CAMERA_CONFIG, STREAM, black_session, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
                        tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
     mock_popen.assert_called_once()
@@ -460,10 +504,10 @@ def test_broken_image_filler_degrades_to_black_instead_of_looping(tmp_path):
     # process is observed to have died on its own while still configured as the
     # same broken image, tick() must give up on it and fall back to black.
     broken_image = {"mode": "image", "path": "assets/standby.png"}
-    exited_filler = MagicMock(poll=MagicMock(return_value=1))
+    exited_filler = MagicMock(poll=MagicMock(return_value=1), stderr=MagicMock(read=MagicMock(return_value=b"")))
     state = VideoState(process=exited_filler, running_source=broken_image)
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         status = tick(state, CAMERA_CONFIG, STREAM, IMAGE_SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
                        tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
     mock_popen.assert_called_once()
@@ -488,7 +532,7 @@ def test_configured_mode_change_escapes_the_degraded_black_state(tmp_path):
     # tick() must try the newly-configured thing fresh rather than staying
     # permanently stuck on black.
     broken_image = {"mode": "image", "path": "assets/standby.png"}
-    state = VideoState(process=MagicMock(poll=MagicMock(return_value=None)),
+    state = VideoState(process=MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b""))),
                         running_source={"mode": "black"}, degraded_mode=broken_image)
     new_image_schedule = StageState(
         stage=Step(name="s2", description="d", start=None, end=None, target_temperature_c=None,
@@ -496,7 +540,7 @@ def test_configured_mode_change_escapes_the_degraded_black_state(tmp_path):
         status="active", stage_progress_pct=0, overall_progress_pct=0,
     )
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         status = tick(state, CAMERA_CONFIG, STREAM, IMAGE_SESSION, new_image_schedule, tmp_path / "overlay.txt",
                        tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
     mock_popen.assert_called_once()
@@ -520,7 +564,7 @@ def test_camera_attempt_does_not_treat_a_leftover_filler_frame_as_connected(tmp_
     os.utime(snapshot_path, (leftover_mtime, leftover_mtime))
     state = VideoState()
     with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
-        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None), stderr=MagicMock(read=MagicMock(return_value=b"")))
         start_camera_attempt(state, CAMERA_CONFIG, STREAM, tmp_path / "overlay.txt", snapshot_path,
                               NOW, NOW, str(tmp_path / "logs"), 30)
     assert state.process_started_at.timestamp() >= leftover_mtime

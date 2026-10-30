@@ -2,6 +2,8 @@ import os
 import re
 from dataclasses import dataclass
 
+from brewcam.config import monitoring
+
 
 class YoutubeConfigError(Exception):
     pass
@@ -36,3 +38,16 @@ def redact_target(target: YoutubeTarget | None) -> str:
 def redact_stderr(text: str) -> str:
     text = re.sub(r"rtsp://[^/@\s]+@", "rtsp://***:***@", text)
     return re.sub(r"rtmps?://\S+", "rtmps://<redacted>", text)
+
+
+def resolve_or_degrade(state, stream_config: dict, monitoring_dir: str, now_local, retention_days: int):
+    """Resolve the YouTube target, degrading to None (and logging once) on misconfiguration."""
+    try:
+        target = resolve_youtube_target(stream_config)
+        state.youtube_error_logged = False
+        return target
+    except YoutubeConfigError:
+        if not state.youtube_error_logged:
+            monitoring.write_event(monitoring_dir, now_local, "youtube_unavailable", {}, retention_days)
+            state.youtube_error_logged = True
+        return None

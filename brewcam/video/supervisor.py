@@ -2,12 +2,19 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 from brewcam.config import monitoring
+from brewcam.video import youtube
 from brewcam.video.state import (
     HEALTHY_RESET_SECONDS,
     STALL_TIMEOUT_SECONDS,
     VideoState,
     backoff_seconds,
 )
+
+
+def _stderr_excerpt(process) -> str:
+    stderr_bytes = process.stderr.read() if process.stderr else b""
+    stderr_text = youtube.redact_stderr(stderr_bytes.decode(errors="replace"))
+    return "\n".join(stderr_text.splitlines()[-20:])
 
 
 def watch_running_process(
@@ -20,16 +27,19 @@ def watch_running_process(
 ) -> None:
     if state.process.poll() is not None:
         previous_status = state.status
+        excerpt = _stderr_excerpt(state.process)
         state.process = None
         state.status = "unavailable"
         state.failure_count += 1
         state.next_restart_at = now + timedelta(seconds=backoff_seconds(state.failure_count))
         if previous_status in ("connected", "stalled"):
-            monitoring.write_event(monitoring_dir, now_local, "camera_disconnected", {}, retention_days)
+            monitoring.write_event(
+                monitoring_dir, now_local, "camera_disconnected", {"excerpt": excerpt}, retention_days
+            )
         elif previous_status == "connecting":
             monitoring.write_event(
-                monitoring_dir, now_local, "camera_reconnecting", {"failure_count": state.failure_count},
-                retention_days,
+                monitoring_dir, now_local, "camera_reconnecting",
+                {"failure_count": state.failure_count, "excerpt": excerpt}, retention_days,
             )
         return
 

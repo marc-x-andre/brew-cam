@@ -4,7 +4,7 @@ from pathlib import Path
 
 from brewcam.config import SessionConfig, monitoring
 from brewcam.schedule import StageState
-from brewcam.video import background
+from brewcam.video import background, youtube
 from brewcam.video.starter import start_camera_attempt, start_filler
 from brewcam.video.state import VideoState
 from brewcam.video.supervisor import watch_running_process
@@ -25,6 +25,8 @@ def tick(
     monitoring_dir: str,
     retention_days: int,
 ) -> dict:
+    youtube_target = youtube.resolve_or_degrade(state, stream_config, monitoring_dir, now_local, retention_days)
+
     configured_mode = background.resolve_configured_mode(session, schedule_state)
     camera_retry_due = state.next_restart_at is None or now >= state.next_restart_at
 
@@ -44,7 +46,7 @@ def tick(
         if state.process is None:  # just failed/stalled this tick — keep the preview fresh immediately
             start_filler(
                 state, {"mode": "black"}, stream_config, overlay_text_path, snapshot_path,
-                now_local, monitoring_dir, retention_days,
+                now_local, monitoring_dir, retention_days, youtube_target,
             )
     elif state.running_source != desired or (state.process is not None and state.process.poll() is not None):
         filler_crashed_on_own = (
@@ -57,7 +59,7 @@ def tick(
         if desired["mode"] == "camera":
             start_camera_attempt(
                 state, camera_config, stream_config, overlay_text_path, snapshot_path,
-                now, now_local, monitoring_dir, retention_days,
+                now, now_local, monitoring_dir, retention_days, youtube_target,
             )
         elif filler_crashed_on_own and desired["mode"] != "black":
             state.degraded_mode = desired
@@ -67,16 +69,23 @@ def tick(
             desired = {"mode": "black"}
             start_filler(
                 state, desired, stream_config, overlay_text_path, snapshot_path,
-                now_local, monitoring_dir, retention_days,
+                now_local, monitoring_dir, retention_days, youtube_target,
             )
         else:
             start_filler(
                 state, desired, stream_config, overlay_text_path, snapshot_path,
-                now_local, monitoring_dir, retention_days,
+                now_local, monitoring_dir, retention_days, youtube_target,
             )
 
     display_source = background.resolve_display_source(desired, state.status)
-    return {"background_mode": display_source["mode"], "ffmpeg_running": state.process is not None}
+    return {
+        "background_mode": display_source["mode"],
+        "ffmpeg_running": state.process is not None,
+        "youtube": {
+            "configured": youtube_target is not None,
+            "leg_active": youtube_target is not None and state.process is not None,
+        },
+    }
 
 
 def stop(state: VideoState) -> None:

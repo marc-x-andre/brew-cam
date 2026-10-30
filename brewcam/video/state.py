@@ -17,6 +17,7 @@ class VideoState:
     connected_since: datetime | None = None
     running_source: dict | None = None
     degraded_mode: dict | None = None
+    youtube_error_logged: bool = False
 
 
 def backoff_seconds(failure_count: int) -> float:
