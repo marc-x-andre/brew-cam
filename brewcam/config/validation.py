@@ -28,7 +28,8 @@ def validate_timezone_offset(moment: datetime, tz_name: str) -> None:
         )
 
 
-def validate_background_mode(spec: dict, assets_dir: Path = Path.cwd()) -> None:
+def validate_background_mode(spec: dict, assets_dir: Path | None = None) -> None:
+    assets_dir = assets_dir if assets_dir is not None else Path.cwd()
     mode = spec["mode"]
     if mode not in {"camera", "image", "black"}:
         raise ConfigError(f"unknown background mode {mode!r}")
