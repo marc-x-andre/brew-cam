@@ -1,3 +1,4 @@
+import textwrap
 from datetime import datetime, timedelta, timezone
 import pytest
 from pathlib import Path
@@ -7,6 +8,7 @@ from brewcam.config.validation import (
     validate_step_sequence,
     validate_timezone_offset,
 )
+from brewcam.config import load_config, ConfigError
 
 def _dt(h):
     return datetime(2026, 11, 7, h, 0, 0, tzinfo=timezone.utc)
@@ -52,3 +54,72 @@ def test_image_mode_missing_file_rejected(tmp_path):
 def test_image_mode_existing_file_passes(tmp_path):
     (tmp_path / "pic.png").write_bytes(b"\x89PNG")
     validate_background_mode({"mode": "image", "path": "pic.png"}, assets_dir=tmp_path)
+
+
+VALID_YAML = textwrap.dedent("""
+session:
+  name: "Test Brew"
+  timezone: "America/Toronto"
+  background: {mode: black}
+  before: {mode: black}
+  after: {mode: black}
+steps:
+  - name: "Mash"
+    description: "desc"
+    start: "2026-11-07T09:00:00-05:00"
+    end: "2026-11-07T10:00:00-05:00"
+    target_temperature_c: 67
+camera:
+  source_env: "CAMERA_SOURCE"
+sensors:
+  temperature: {enabled: true, driver: simulated, stale_after_seconds: 120}
+stream:
+  destination: youtube
+  key_env: "YOUTUBE_STREAM_KEY"
+  width: 1280
+  height: 720
+  fps: 25
+overlays:
+  enabled: [session, temperature, stage, progress]
+monitoring:
+  interval_seconds: 60
+  directory: logs
+  retention_days: 30
+""")
+
+def test_load_config_happy_path(tmp_path):
+    cfg_path = tmp_path / "session.yaml"
+    cfg_path.write_text(VALID_YAML)
+    config = load_config(str(cfg_path))
+    assert config.session.name == "Test Brew"
+    assert len(config.steps) == 1
+    assert config.steps[0].name == "Mash"
+    assert config.camera["source_env"] == "CAMERA_SOURCE"
+
+
+def _load(tmp_path, yaml_text):
+    cfg_path = tmp_path / "session.yaml"
+    cfg_path.write_text(yaml_text)
+    return load_config(str(cfg_path))
+
+def test_missing_start_key_rejected(tmp_path):
+    bad = VALID_YAML.replace('start: "2026-11-07T09:00:00-05:00"\n', "")
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
+
+def test_naive_timestamp_rejected(tmp_path):
+    bad = VALID_YAML.replace('"2026-11-07T09:00:00-05:00"', '"2026-11-07T09:00:00"')
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
+
+def test_zero_length_step_rejected(tmp_path):
+    bad = VALID_YAML.replace(
+        'end: "2026-11-07T10:00:00-05:00"', 'end: "2026-11-07T09:00:00-05:00"'
+    )
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
+
+def test_unknown_background_mode_rejected(tmp_path):
+    bad = VALID_YAML.replace("background: {mode: black}", "background: {mode: bogus}")
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
