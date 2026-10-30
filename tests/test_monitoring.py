@@ -10,9 +10,11 @@ from brewcam.config.monitoring import (
     SCHEMA_VERSION,
 )
 from brewcam.overlay import OverlayData
+from brewcam.sensors import SensorReading
 
 NOW = datetime(2026, 11, 7, 9, 20, tzinfo=timezone.utc)
 OVERLAY = OverlayData("Test Brew", "Mash", "desc", "active", 10.0, 5.0, "20.0C")
+TEMPERATURE = SensorReading("temperature", 20.0, "C", NOW, "available")
 
 
 def test_daily_log_path_names_file_by_date(tmp_path):
@@ -46,17 +48,39 @@ def test_retention_deletes_files_older_than_window(tmp_path):
 
 
 def test_build_snapshot_record_shape():
-    record = build_snapshot_record(NOW, OVERLAY, {"background_mode": "black", "ffmpeg_running": False})
+    record = build_snapshot_record(
+        NOW, OVERLAY, {"background_mode": "black", "ffmpeg_running": False}, TEMPERATURE
+    )
     assert record["event_type"] == "snapshot"
     assert record["schema_version"] == SCHEMA_VERSION
     assert record["session"]["stage"] == "Mash"
     assert record["session"]["progress_pct"] == 10.0
     assert record["video"] == {"background": "black", "ffmpeg_running": False}
+    assert record["sensors"]["temperature"] == {
+        "value": 20.0,
+        "unit": "C",
+        "status": "available",
+        "measured_at": NOW.isoformat(),
+    }
+
+
+def test_snapshot_record_preserves_stale_vs_unavailable_distinction():
+    stale = SensorReading("temperature", 20.0, "C", NOW, "stale")
+    unavailable = SensorReading("temperature", None, "C", None, "unavailable")
+    video_status = {"background_mode": "black", "ffmpeg_running": False}
+
+    stale_record = build_snapshot_record(NOW, OVERLAY, video_status, stale)
+    unavailable_record = build_snapshot_record(NOW, OVERLAY, video_status, unavailable)
+
+    assert stale_record["sensors"]["temperature"]["status"] == "stale"
+    assert unavailable_record["sensors"]["temperature"]["status"] == "unavailable"
+    assert unavailable_record["sensors"]["temperature"]["value"] is None
+    assert unavailable_record["sensors"]["temperature"]["measured_at"] is None
 
 
 def test_snapshot_record_ignores_unexpected_fields_that_could_carry_secrets():
     leaky_status = {"background_mode": "black", "ffmpeg_running": False, "stream_key": "super-secret"}
-    record = build_snapshot_record(NOW, OVERLAY, leaky_status)
+    record = build_snapshot_record(NOW, OVERLAY, leaky_status, TEMPERATURE)
     assert "super-secret" not in str(record)
     assert "stream_key" not in record["video"]
 
@@ -69,7 +93,14 @@ def test_build_event_record_shape():
 
 
 def test_write_snapshot_appends_to_todays_file(tmp_path):
-    write_snapshot(str(tmp_path), NOW, OVERLAY, {"background_mode": "black", "ffmpeg_running": False}, retention_days=30)
+    write_snapshot(
+        str(tmp_path),
+        NOW,
+        OVERLAY,
+        {"background_mode": "black", "ffmpeg_running": False},
+        retention_days=30,
+        temperature=TEMPERATURE,
+    )
     lines = (tmp_path / "2026-11-07.jsonl").read_text().splitlines()
     assert json.loads(lines[0])["event_type"] == "snapshot"
 

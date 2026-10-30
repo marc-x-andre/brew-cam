@@ -81,16 +81,15 @@ def load_config(path: str) -> BrewcamConfig:
             overlays=raw["overlays"]["enabled"],
             monitoring=raw["monitoring"],
         )
-    except (KeyError, TypeError, yaml.YAMLError) as exc:
+        validate_step_sequence([(step.start, step.end) for step in config.steps])
+        for background_spec in (config.session.background, config.session.before, config.session.after):
+            validate_background_mode(background_spec)
+        for step in config.steps:
+            if step.background is not None:
+                validate_background_mode(step.background)
+            validate_timezone_offset(step.start, config.session.timezone)
+            validate_timezone_offset(step.end, config.session.timezone)
+    except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         raise ConfigError(f"malformed config at {path}: {exc}") from exc
-
-    validate_step_sequence([(step.start, step.end) for step in config.steps])
-    for background_spec in (config.session.background, config.session.before, config.session.after):
-        validate_background_mode(background_spec)
-    for step in config.steps:
-        if step.background is not None:
-            validate_background_mode(step.background)
-        validate_timezone_offset(step.start, config.session.timezone)
-        validate_timezone_offset(step.end, config.session.timezone)
 
     return config

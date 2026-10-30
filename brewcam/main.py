@@ -28,29 +28,40 @@ def run(config_path: str) -> None:
     last_snapshot_at = None
     now_local = utc_now().astimezone(tz)
 
-    while not stop:
-        now = utc_now()
-        state = compute_schedule_state(config.steps, now)
-        reading = simulated.read_temperature(
-            now, config.sensors["temperature"]["stale_after_seconds"]
-        )
-        overlay = build_overlay(config, state, reading)
-        now_local = now.astimezone(tz)
-
-        if (
-            last_snapshot_at is None
-            or (now - last_snapshot_at).total_seconds() >= interval_seconds
-        ):
-            monitoring.write_snapshot(
-                config.monitoring["directory"],
-                now_local,
-                overlay,
-                VIDEO_STATUS,
-                config.monitoring["retention_days"],
+    try:
+        while not stop:
+            now = utc_now()
+            state = compute_schedule_state(config.steps, now)
+            reading = simulated.read_temperature(
+                now, config.sensors["temperature"]["stale_after_seconds"]
             )
-            last_snapshot_at = now
+            overlay = build_overlay(config, state, reading)
+            now_local = now.astimezone(tz)
 
-        time.sleep(1)
+            if (
+                last_snapshot_at is None
+                or (now - last_snapshot_at).total_seconds() >= interval_seconds
+            ):
+                monitoring.write_snapshot(
+                    config.monitoring["directory"],
+                    now_local,
+                    overlay,
+                    VIDEO_STATUS,
+                    config.monitoring["retention_days"],
+                    reading,
+                )
+                last_snapshot_at = now
+
+            time.sleep(1)
+    except Exception as exc:
+        monitoring.write_event(
+            config.monitoring["directory"],
+            now_local,
+            "error",
+            {"message": str(exc)},
+            config.monitoring["retention_days"],
+        )
+        raise
 
     monitoring.write_event(
         config.monitoring["directory"],

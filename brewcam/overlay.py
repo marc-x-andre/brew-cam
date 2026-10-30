@@ -21,7 +21,7 @@ def build_overlay(
 ) -> OverlayData:
     stage = schedule_state.stage
     if temperature.status == "available":
-        temperature_display = f"{temperature.value}{temperature.unit}"
+        temperature_display = f"{temperature.value:.1f}{temperature.unit}"
     else:
         # "stale" is also shown as "Unavailable" per the charter's rule that a
         # stale reading must never display as current.

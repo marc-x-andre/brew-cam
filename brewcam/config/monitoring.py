@@ -1,12 +1,15 @@
 from datetime import datetime
 
 from brewcam.overlay import OverlayData
+from brewcam.sensors import SensorReading
 from brewcam.utils import jsonl
 
 SCHEMA_VERSION = 1
 
 
-def build_snapshot_record(now: datetime, overlay: OverlayData, video_status: dict) -> dict:
+def build_snapshot_record(
+    now: datetime, overlay: OverlayData, video_status: dict, temperature: SensorReading
+) -> dict:
     return {
         "timestamp": now.isoformat(),
         "event_type": "snapshot",
@@ -19,7 +22,18 @@ def build_snapshot_record(now: datetime, overlay: OverlayData, video_status: dic
             "background": video_status["background_mode"],
             "ffmpeg_running": video_status["ffmpeg_running"],
         },
-        "sensors": {"temperature": {"display": overlay.temperature_display}},
+        "sensors": {
+            "temperature": {
+                "value": temperature.value,
+                "unit": temperature.unit,
+                "status": temperature.status,
+                "measured_at": (
+                    temperature.measured_at.isoformat()
+                    if temperature.measured_at is not None
+                    else None
+                ),
+            }
+        },
     }
 
 
@@ -38,8 +52,9 @@ def write_snapshot(
     overlay: OverlayData,
     video_status: dict,
     retention_days: int,
+    temperature: SensorReading,
 ) -> None:
-    record = build_snapshot_record(now_local, overlay, video_status)
+    record = build_snapshot_record(now_local, overlay, video_status, temperature)
     jsonl.append_jsonl(directory, now_local.date(), record)
     jsonl.enforce_retention(directory, now_local.date(), retention_days)
 

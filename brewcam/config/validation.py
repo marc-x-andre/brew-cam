@@ -8,6 +8,8 @@ class ConfigError(Exception):
 
 
 def validate_step_sequence(spans: list[tuple[datetime, datetime]]) -> None:
+    if not spans:
+        raise ConfigError("steps list must not be empty")
     for start, end in spans:
         if end <= start:
             raise ConfigError(f"span {start.isoformat()}..{end.isoformat()} has end <= start")

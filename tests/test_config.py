@@ -123,3 +123,23 @@ def test_unknown_background_mode_rejected(tmp_path):
     bad = VALID_YAML.replace("background: {mode: black}", "background: {mode: bogus}")
     with pytest.raises(ConfigError):
         _load(tmp_path, bad)
+
+def test_image_background_missing_path_rejected(tmp_path):
+    bad = VALID_YAML.replace("background: {mode: black}", "background: {mode: image}", 1)
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
+
+def test_empty_steps_list_rejected(tmp_path):
+    bad = VALID_YAML.replace(
+        textwrap.dedent("""\
+        steps:
+          - name: "Mash"
+            description: "desc"
+            start: "2026-11-07T09:00:00-05:00"
+            end: "2026-11-07T10:00:00-05:00"
+            target_temperature_c: 67
+        """),
+        "steps: []\n",
+    )
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
