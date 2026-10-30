@@ -34,7 +34,14 @@ def start_camera_attempt(
     )
     try:
         state.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        state.process_started_at = now
+        try:
+            existing_mtime = snapshot_path.stat().st_mtime
+        except OSError:
+            existing_mtime = None
+        state.process_started_at = (
+            now if existing_mtime is None or existing_mtime <= now.timestamp()
+            else datetime.fromtimestamp(existing_mtime, tz=now.tzinfo)
+        )
         state.status = "connecting"
         state.running_source = {"mode": "camera"}
     except OSError:

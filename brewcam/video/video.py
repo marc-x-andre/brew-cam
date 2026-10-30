@@ -2,7 +2,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from brewcam.config import SessionConfig
+from brewcam.config import SessionConfig, monitoring
 from brewcam.schedule import StageState
 from brewcam.video import background
 from brewcam.video.starter import start_camera_attempt, start_filler
@@ -34,18 +34,24 @@ def tick(
             if (state.running_source == {"mode": "camera"} or camera_retry_due)
             else {"mode": "black"}
         )
+    elif state.degraded_mode == configured_mode:
+        desired = {"mode": "black"}
     else:
         desired = configured_mode
 
     if state.running_source == {"mode": "camera"} and desired == {"mode": "camera"}:
         watch_running_process(state, snapshot_path, now, now_local, monitoring_dir, retention_days)
         if state.process is None:  # just failed/stalled this tick — keep the preview fresh immediately
-            fallback = {"mode": "black"} if configured_mode["mode"] == "camera" else configured_mode
             start_filler(
-                state, fallback, stream_config, overlay_text_path, snapshot_path,
+                state, {"mode": "black"}, stream_config, overlay_text_path, snapshot_path,
                 now_local, monitoring_dir, retention_days,
             )
     elif state.running_source != desired or (state.process is not None and state.process.poll() is not None):
+        filler_crashed_on_own = (
+            state.process is not None
+            and state.process.poll() is not None
+            and state.running_source == desired
+        )
         if state.process is not None:
             stop(state)
         if desired["mode"] == "camera":
@@ -53,13 +59,23 @@ def tick(
                 state, camera_config, stream_config, overlay_text_path, snapshot_path,
                 now, now_local, monitoring_dir, retention_days,
             )
+        elif filler_crashed_on_own and desired["mode"] != "black":
+            state.degraded_mode = desired
+            monitoring.write_event(
+                monitoring_dir, now_local, "background_degraded", {"mode": desired["mode"]}, retention_days,
+            )
+            desired = {"mode": "black"}
+            start_filler(
+                state, desired, stream_config, overlay_text_path, snapshot_path,
+                now_local, monitoring_dir, retention_days,
+            )
         else:
             start_filler(
                 state, desired, stream_config, overlay_text_path, snapshot_path,
                 now_local, monitoring_dir, retention_days,
             )
 
-    display_source = background.resolve_display_source(configured_mode, state.status)
+    display_source = background.resolve_display_source(desired, state.status)
     return {"background_mode": display_source["mode"], "ffmpeg_running": state.process is not None}
 
 

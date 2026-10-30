@@ -134,8 +134,9 @@ verification.
 Video compositing is now implemented and locally verified: background-mode
 switching (camera, static image, and black-screen fallback) and overlay
 text burn-in all run through a real FFmpeg pipeline, confirmed via
-synthetic-source automated tests as well as manual verification against the
-composited output. YouTube publishing is **not yet implemented** — there is
+synthetic-source automated tests as well as manual verification against
+composited output from those same synthetic (black/image) sources — not yet
+against a real camera feed. YouTube publishing is **not yet implemented** — there is
 no `youtube.py` yet, and nothing in this repo publishes a stream anywhere.
 ThermoPro sensor integration also remains a stub; the temperature readings
 are still simulated.

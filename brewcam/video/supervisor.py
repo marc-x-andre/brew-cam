@@ -37,7 +37,7 @@ def watch_running_process(
     try:
         mtime = snapshot_path.stat().st_mtime
         is_fresh = (
-            mtime >= state.process_started_at.timestamp()
+            mtime > state.process_started_at.timestamp()
             and (now.timestamp() - mtime) <= STALL_TIMEOUT_SECONDS
         )
     except OSError:

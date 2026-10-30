@@ -11,6 +11,7 @@ from brewcam.schedule import StageState
 from brewcam.video.camera import CameraSourceError, build_snapshot_command, redact_url, resolve_rtsp_url
 from brewcam.video.starter import start_camera_attempt, start_filler
 from brewcam.video.state import UNAVAILABLE_RETRY_SECONDS
+from brewcam.video.supervisor import watch_running_process
 from brewcam.video.video import VideoState, tick
 
 NOW = datetime(2026, 11, 7, 9, 0, 0, tzinfo=timezone.utc)
@@ -21,6 +22,8 @@ SESSION = SessionConfig(name="T", timezone="UTC", background={"mode": "camera"},
 ACTIVE_NO_OVERRIDE = Step(name="s", description="d", start=None, end=None,
                            target_temperature_c=None, background=None)
 SCHEDULE_ACTIVE = StageState(stage=ACTIVE_NO_OVERRIDE, status="active", stage_progress_pct=0, overall_progress_pct=0)
+IMAGE_SESSION = SessionConfig(name="T", timezone="UTC", background={"mode": "image", "path": "assets/standby.png"},
+                               before={"mode": "black"}, after={"mode": "black"})
 
 
 def test_resolve_rtsp_url_reads_named_env_var(monkeypatch):
@@ -446,3 +449,90 @@ def test_filler_process_dying_is_noticed_and_restarted_the_same_tick(tmp_path):
     assert state.process is not exited_filler
     assert state.running_source == {"mode": "black"}
     assert status["ffmpeg_running"] is True
+
+
+# --- Finding 1 (final review): broken non-camera background degrades to black ---
+
+
+def test_broken_image_filler_degrades_to_black_instead_of_looping(tmp_path):
+    # Review finding: a permanently broken image path (e.g. missing file) must
+    # not respawn the identical broken ffmpeg command forever. Once the filler
+    # process is observed to have died on its own while still configured as the
+    # same broken image, tick() must give up on it and fall back to black.
+    broken_image = {"mode": "image", "path": "assets/standby.png"}
+    exited_filler = MagicMock(poll=MagicMock(return_value=1))
+    state = VideoState(process=exited_filler, running_source=broken_image)
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        status = tick(state, CAMERA_CONFIG, STREAM, IMAGE_SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+                       tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
+    mock_popen.assert_called_once()
+    assert state.degraded_mode == broken_image
+    assert state.running_source == {"mode": "black"}
+    assert status["background_mode"] == "black"
+
+    # Next tick: the black filler is healthy now. Must not try to restart the
+    # broken image — no oscillation, no respawn of the broken config.
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen_again:
+        status2 = tick(state, CAMERA_CONFIG, STREAM, IMAGE_SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+                        tmp_path / "snap.jpg", NOW + timedelta(seconds=5), NOW + timedelta(seconds=5),
+                        str(tmp_path / "logs"), 30)
+    mock_popen_again.assert_not_called()
+    assert state.running_source == {"mode": "black"}
+    assert status2["background_mode"] == "black"
+
+
+def test_configured_mode_change_escapes_the_degraded_black_state(tmp_path):
+    # Once configured_mode changes to something other than the abandoned broken
+    # config (a step boundary to a different image, or to black directly),
+    # tick() must try the newly-configured thing fresh rather than staying
+    # permanently stuck on black.
+    broken_image = {"mode": "image", "path": "assets/standby.png"}
+    state = VideoState(process=MagicMock(poll=MagicMock(return_value=None)),
+                        running_source={"mode": "black"}, degraded_mode=broken_image)
+    new_image_schedule = StageState(
+        stage=Step(name="s2", description="d", start=None, end=None, target_temperature_c=None,
+                   background={"mode": "image", "path": "assets/other.png"}),
+        status="active", stage_progress_pct=0, overall_progress_pct=0,
+    )
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        status = tick(state, CAMERA_CONFIG, STREAM, IMAGE_SESSION, new_image_schedule, tmp_path / "overlay.txt",
+                       tmp_path / "snap.jpg", NOW, NOW, str(tmp_path / "logs"), 30)
+    mock_popen.assert_called_once()
+    assert state.running_source == {"mode": "image", "path": "assets/other.png"}
+    assert status["background_mode"] == "image"
+
+
+# --- Finding 2 (final review): a camera reconnect can't false-read a leftover filler frame ---
+
+
+def test_camera_attempt_does_not_treat_a_leftover_filler_frame_as_connected(tmp_path, monkeypatch):
+    # Review finding: start_camera_attempt previously set process_started_at to
+    # the tick's own `now`, captured before stop()'s up-to-5s wait on the prior
+    # (filler) process. If that prior process flushed one more frame during its
+    # grace period, its mtime could land >= process_started_at purely from that
+    # timing gap, falsely reading as a fresh camera frame.
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    snapshot_path = tmp_path / "snap.jpg"
+    snapshot_path.write_bytes(b"leftover-frame")
+    leftover_mtime = NOW.timestamp() + 1  # leftover filler frame flushed around attempt start
+    os.utime(snapshot_path, (leftover_mtime, leftover_mtime))
+    state = VideoState()
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        start_camera_attempt(state, CAMERA_CONFIG, STREAM, tmp_path / "overlay.txt", snapshot_path,
+                              NOW, NOW, str(tmp_path / "logs"), 30)
+    assert state.process_started_at.timestamp() >= leftover_mtime
+
+    # No new frame yet (mtime unchanged) — must not read as connected.
+    later = NOW + timedelta(seconds=2)
+    watch_running_process(state, snapshot_path, later, later, str(tmp_path / "logs"), 30)
+    assert state.status != "connected"
+
+    # A genuinely new frame arrives strictly after process_started_at — must be detected.
+    fresh_mtime = state.process_started_at.timestamp() + 1
+    os.utime(snapshot_path, (fresh_mtime, fresh_mtime))
+    even_later = later + timedelta(seconds=1)
+    watch_running_process(state, snapshot_path, even_later, even_later, str(tmp_path / "logs"), 30)
+    assert state.status == "connected"
