@@ -26,13 +26,22 @@ def watch_running_process(
         state.next_restart_at = now + timedelta(seconds=backoff_seconds(state.failure_count))
         if previous_status in ("connected", "stalled"):
             monitoring.write_event(monitoring_dir, now_local, "camera_disconnected", {}, retention_days)
+        elif previous_status == "connecting":
+            monitoring.write_event(
+                monitoring_dir, now_local, "camera_reconnecting", {"failure_count": state.failure_count},
+                retention_days,
+            )
         return
 
-    is_fresh = (
-        snapshot_path.exists()
-        and snapshot_path.stat().st_mtime >= state.process_started_at.timestamp()
-        and (now.timestamp() - snapshot_path.stat().st_mtime) <= STALL_TIMEOUT_SECONDS
-    )
+    is_fresh = False
+    try:
+        mtime = snapshot_path.stat().st_mtime
+        is_fresh = (
+            mtime >= state.process_started_at.timestamp()
+            and (now.timestamp() - mtime) <= STALL_TIMEOUT_SECONDS
+        )
+    except OSError:
+        pass  # file missing or briefly unreadable mid-write — treat as not-yet-fresh
 
     if is_fresh:
         if state.status != "connected":
@@ -43,7 +52,8 @@ def watch_running_process(
             state.failure_count = 0
         return
 
-    if state.status == "connected":
+    connecting_elapsed = (now - state.process_started_at).total_seconds()
+    if state.status == "connected" or connecting_elapsed > STALL_TIMEOUT_SECONDS:
         state.process.terminate()
         state.process = None
         state.status = "stalled"

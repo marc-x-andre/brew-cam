@@ -115,8 +115,10 @@ The only difference between the two is the hostname in `CAMERA_SOURCE`:
   the Wyze app and that your Wyze account/region matches what the bridge
   is configured for.
 - **Connection timeouts:** look for `camera_unavailable` (misconfigured or
-  unreachable `CAMERA_SOURCE`) or `camera_stalled` (camera reachable but
-  no frames) events in the day's JSONL log.
+  unreachable `CAMERA_SOURCE`), `camera_stalled` (camera reachable but no
+  frames, including a connection that never produces a first frame), or
+  `camera_reconnecting` (ffmpeg started but exited almost immediately —
+  often a wrong stream path or credential) events in the day's JSONL log.
 - **An interrupted stream:** expect a `camera_disconnected` event followed
   by automatic reconnection attempts with growing backoff (capped at 60s)
   — sensor readings and the main loop keep running throughout.

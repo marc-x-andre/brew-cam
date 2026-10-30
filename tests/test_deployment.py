@@ -22,3 +22,15 @@ def test_compose_file_contains_no_literal_secrets():
     for placeholder in ("WYZE_KEY_ID", "WYZE_API_KEY"):
         assert f"${{{placeholder}}}" in text  # substitution syntax present
     assert "@" not in text  # no embedded-credential URL written literally into the compose file
+
+
+def test_dockerignore_keeps_secrets_and_vcs_history_out_of_the_image():
+    # Found in review: the Dockerfile does `COPY . .` with no .dockerignore, so
+    # building the image bakes the real (gitignored) .env — including
+    # WYZE_API_KEY and the credentialed CAMERA_SOURCE — into an image layer.
+    with open(".dockerignore") as f:
+        entries = {line.strip() for line in f if line.strip() and not line.startswith("#")}
+    for required in (".env", ".git", "logs", "runtime"):
+        assert any(
+            entry == required or entry.rstrip("/") == required for entry in entries
+        ), f"{required!r} is not excluded by .dockerignore"

@@ -22,6 +22,7 @@ def run(config_path: str) -> None:
         stop = True
 
     signal.signal(signal.SIGINT, _handle_sigint)
+    signal.signal(signal.SIGTERM, _handle_sigint)
 
     tz = ZoneInfo(config.session.timezone)
     interval_seconds = config.monitoring["interval_seconds"]

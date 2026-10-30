@@ -18,7 +18,10 @@ def resolve_rtsp_url(camera_config: dict) -> str:
 
 
 def redact_url(url: str) -> str:
-    parts = urlsplit(url)
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return "<unparseable-url>"
     netloc = parts.netloc
     if "@" in netloc:
         _, host = netloc.rsplit("@", 1)
@@ -41,7 +44,7 @@ def build_snapshot_command(rtsp_url: str, snapshot_path: Path) -> list[str]:
     return [
         "ffmpeg",
         "-rtsp_transport", "tcp",
-        "-rw_timeout", "10000000",
+        "-timeout", "10000000",
         "-i", rtsp_url,
         "-an",
         "-vf", "fps=1/5",
