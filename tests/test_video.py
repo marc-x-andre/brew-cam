@@ -306,6 +306,34 @@ def test_tick_logs_an_event_when_a_just_started_process_exits_immediately(tmp_pa
     assert "camera_reconnecting" in event_types
 
 
+def test_stderr_excerpt_never_leaks_a_raw_secret_into_the_log(tmp_path, monkeypatch):
+    # The task's own named risk: stderr capture was turned on (DEVNULL -> PIPE) so a
+    # failure's excerpt could be logged for diagnosis, but ffmpeg's stderr can itself
+    # contain the raw RTSP credentials or RTMPS stream key. redact_stderr must run
+    # before the excerpt reaches write_event — this proves it end-to-end through tick(),
+    # mirroring test_popen_failure_never_leaks_the_raw_url_into_logs but for the new
+    # stderr-capture path rather than the Popen-failure path.
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    secret_stderr = b'Input #0, rtsp, from "rtsp://wb:wyze-secret@wyze-bridge:8554/cam1":'
+    exited_process = MagicMock(
+        poll=MagicMock(return_value=1), terminate=MagicMock(), kill=MagicMock(), wait=MagicMock(),
+        stderr=MagicMock(read=MagicMock(return_value=secret_stderr)),
+    )
+    state = VideoState(process=exited_process, status="connecting", process_started_at=NOW,
+                        running_source={"mode": "camera"})
+    log_dir = tmp_path / "logs"
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None),
+                                             stderr=MagicMock(read=MagicMock(return_value=b"")))
+        tick(
+            state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt", tmp_path / "snap.jpg",
+            NOW + timedelta(seconds=1), NOW + timedelta(seconds=1), str(log_dir), 30,
+        )
+    logged = "\n".join(p.read_text() for p in log_dir.glob("*.jsonl"))
+    assert "wyze-secret" not in logged
+    assert '"excerpt"' in logged
+
+
 def test_stop_is_a_safe_no_op_with_no_process():
     from brewcam.video.video import stop
 
