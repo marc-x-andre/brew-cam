@@ -70,5 +70,10 @@ def test_missing_image_file_exits_quickly_instead_of_hanging(tmp_path):
                                       None, overlay_path, {"width": 320, "height": 240, "fps": 10},
                                       tmp_path / "snap.jpg")
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    exit_code = process.wait(timeout=5)  # must exit on its own, not hang
-    assert exit_code != 0
+    try:
+        exit_code = process.wait(timeout=5)  # must exit on its own, not hang
+        assert exit_code != 0
+    finally:
+        if process.poll() is None:
+            process.terminate()
+            process.wait(timeout=5)
