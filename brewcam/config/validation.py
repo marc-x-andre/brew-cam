@@ -37,3 +37,10 @@ def validate_background_mode(spec: dict, assets_dir: Path | None = None) -> None
         raise ConfigError(f"unknown background mode {mode!r}")
     if mode == "image" and not (assets_dir / spec["path"]).is_file():
         raise ConfigError(f"background image {spec['path']!r} not found in {assets_dir}")
+
+
+def validate_stream_dimensions(spec: dict) -> None:
+    for key in ("width", "height", "fps"):
+        value = spec[key]
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ConfigError(f"stream {key} must be a positive integer, got {value!r}")

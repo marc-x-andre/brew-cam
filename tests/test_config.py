@@ -6,6 +6,7 @@ from brewcam.config.validation import (
     ConfigError,
     validate_background_mode,
     validate_step_sequence,
+    validate_stream_dimensions,
     validate_timezone_offset,
 )
 from brewcam.config import load_config, ConfigError
@@ -141,5 +142,22 @@ def test_empty_steps_list_rejected(tmp_path):
         """),
         "steps: []\n",
     )
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
+
+
+def test_validate_stream_dimensions_accepts_positive_integers():
+    validate_stream_dimensions({"width": 1280, "height": 720, "fps": 25})  # must not raise
+
+def test_validate_stream_dimensions_rejects_non_positive_width():
+    with pytest.raises(ConfigError):
+        validate_stream_dimensions({"width": 0, "height": 720, "fps": 25})
+
+def test_validate_stream_dimensions_rejects_non_integer_fps():
+    with pytest.raises(ConfigError):
+        validate_stream_dimensions({"width": 1280, "height": 720, "fps": "fast"})
+
+def test_stream_dimensions_checked_by_load_config(tmp_path):
+    bad = VALID_YAML.replace("height: 720", "height: -720")
     with pytest.raises(ConfigError):
         _load(tmp_path, bad)

@@ -8,6 +8,7 @@ from .validation import (
     ConfigError,
     validate_background_mode,
     validate_step_sequence,
+    validate_stream_dimensions,
     validate_timezone_offset,
 )
 
@@ -82,6 +83,7 @@ def load_config(path: str) -> BrewcamConfig:
             monitoring=raw["monitoring"],
         )
         validate_step_sequence([(step.start, step.end) for step in config.steps])
+        validate_stream_dimensions(config.stream)
         for background_spec in (config.session.background, config.session.before, config.session.after):
             validate_background_mode(background_spec)
         for step in config.steps:
