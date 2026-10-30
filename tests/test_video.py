@@ -213,6 +213,32 @@ def test_backoff_grows_and_caps_at_sixty_seconds(tmp_path, monkeypatch):
     assert max(gaps) <= 60
 
 
+def test_camera_death_and_filler_start_failure_in_the_same_tick_does_not_crash_loop(tmp_path, monkeypatch):
+    # Regression (review finding): if the camera dies this tick AND the same-tick
+    # fallback start_filler call also fails to start (e.g. ffmpeg missing), both
+    # process-teardown paths must clear running_source. Otherwise running_source
+    # stays {"mode": "camera"} with process=None, and the NEXT tick's first
+    # branch (running_source == camera and desired == camera) calls
+    # watch_running_process on a None process, raising AttributeError on every
+    # subsequent tick — an unrecoverable crash loop.
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    exited_process = MagicMock(poll=MagicMock(return_value=1))
+    state = VideoState(process=exited_process, status="connected", process_started_at=NOW,
+                        connected_since=NOW, running_source={"mode": "camera"})
+    with patch("brewcam.video.starter.subprocess.Popen", side_effect=OSError("ffmpeg missing")):
+        tick(state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+             tmp_path / "snap.jpg", NOW + timedelta(seconds=1), NOW + timedelta(seconds=1),
+             str(tmp_path / "logs"), 30)
+    assert state.process is None
+    assert state.running_source is None  # must not be stuck at {"mode": "camera"} with no process
+    # the next tick must not raise, even with the camera still unresolved
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None))
+        tick(state, CAMERA_CONFIG, STREAM, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+             tmp_path / "snap.jpg", NOW + timedelta(seconds=2), NOW + timedelta(seconds=2),
+             str(tmp_path / "logs"), 30)  # must not raise AttributeError
+
+
 def test_healthy_connection_resets_failure_count(tmp_path, monkeypatch):
     monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
     snapshot_path = tmp_path / "snap.jpg"

@@ -38,6 +38,7 @@ def start_camera_attempt(
         state.status = "connecting"
         state.running_source = {"mode": "camera"}
     except OSError:
+        state.running_source = None
         state.failure_count += 1
         state.next_restart_at = now + timedelta(seconds=backoff_seconds(state.failure_count))
         monitoring.write_event(
@@ -60,6 +61,7 @@ def start_filler(
         state.process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         state.running_source = target_mode
     except OSError:
+        state.running_source = None
         monitoring.write_event(
             monitoring_dir, now_local, "filler_start_failed", {"mode": target_mode.get("mode")}, retention_days
         )

@@ -72,3 +72,4 @@ def stop(state: VideoState) -> None:
     except subprocess.TimeoutExpired:
         state.process.kill()
     state.process = None
+    state.running_source = None
