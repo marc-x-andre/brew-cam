@@ -9,6 +9,7 @@ from brewcam.overlay import build_overlay
 from brewcam.schedule import compute_schedule_state
 from brewcam.sensors import simulated
 from brewcam.utils.clock import utc_now
+from brewcam.video import overlay_text
 from brewcam.video import video
 
 
@@ -31,6 +32,7 @@ def run(config_path: str) -> None:
     video_state = video.VideoState()
     snapshot_path = Path(config.monitoring["directory"]).parent / "runtime" / "camera_preview.jpg"
     snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_text_path = snapshot_path.parent / "overlay.txt"
 
     try:
         while not stop:
@@ -41,9 +43,14 @@ def run(config_path: str) -> None:
                 now, config.sensors["temperature"]["stale_after_seconds"]
             )
             overlay = build_overlay(config, state, reading)
+            overlay_text.write_overlay_text(overlay_text_path, overlay_text.render_overlay_text(overlay))
             video_status = video.tick(
                 video_state,
                 config.camera,
+                config.stream,
+                config.session,
+                state,
+                overlay_text_path,
                 snapshot_path,
                 now,
                 now_local,
