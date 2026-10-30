@@ -10,6 +10,7 @@ from .validation import (
     validate_step_sequence,
     validate_stream_dimensions,
     validate_timezone_offset,
+    validate_youtube_stream,
 )
 
 
@@ -84,6 +85,7 @@ def load_config(path: str) -> BrewcamConfig:
         )
         validate_step_sequence([(step.start, step.end) for step in config.steps])
         validate_stream_dimensions(config.stream)
+        validate_youtube_stream(config.stream)
         for background_spec in (config.session.background, config.session.before, config.session.after):
             validate_background_mode(background_spec)
         for step in config.steps:

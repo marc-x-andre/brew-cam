@@ -44,3 +44,16 @@ def validate_stream_dimensions(spec: dict) -> None:
         value = spec[key]
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
             raise ConfigError(f"stream {key} must be a positive integer, got {value!r}")
+
+
+def validate_youtube_stream(spec: dict) -> None:
+    if spec.get("destination") != "youtube":
+        return
+    for key in ("ingest_url_env", "key_env"):
+        value = spec.get(key)
+        if not isinstance(value, str) or not value:
+            raise ConfigError(f"youtube stream {key} must be a non-empty string, got {value!r}")
+    if "bitrate_kbps" in spec:
+        bitrate = spec["bitrate_kbps"]
+        if not isinstance(bitrate, int) or isinstance(bitrate, bool) or bitrate <= 0:
+            raise ConfigError(f"youtube stream bitrate_kbps must be a positive integer, got {bitrate!r}")

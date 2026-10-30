@@ -26,7 +26,9 @@ sensors:
     stale_after_seconds: 120
 stream:
   destination: youtube
+  ingest_url_env: "YOUTUBE_INGEST_URL"
   key_env: "YOUTUBE_STREAM_KEY"
+  # bitrate_kbps: 3000
   width: 1280
   height: 720
   fps: 25

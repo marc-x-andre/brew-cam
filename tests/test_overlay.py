@@ -53,6 +53,7 @@ sensors:
   temperature: {enabled: true, driver: simulated, stale_after_seconds: 120}
 stream:
   destination: youtube
+  ingest_url_env: "YOUTUBE_INGEST_URL"
   key_env: "YOUTUBE_STREAM_KEY"
   width: 1280
   height: 720

@@ -8,6 +8,7 @@ from brewcam.config.validation import (
     validate_step_sequence,
     validate_stream_dimensions,
     validate_timezone_offset,
+    validate_youtube_stream,
 )
 from brewcam.config import load_config, ConfigError
 
@@ -76,6 +77,7 @@ sensors:
   temperature: {enabled: true, driver: simulated, stale_after_seconds: 120}
 stream:
   destination: youtube
+  ingest_url_env: "YOUTUBE_INGEST_URL"
   key_env: "YOUTUBE_STREAM_KEY"
   width: 1280
   height: 720
@@ -159,5 +161,33 @@ def test_validate_stream_dimensions_rejects_non_integer_fps():
 
 def test_stream_dimensions_checked_by_load_config(tmp_path):
     bad = VALID_YAML.replace("height: 720", "height: -720")
+    with pytest.raises(ConfigError):
+        _load(tmp_path, bad)
+
+
+def test_validate_youtube_stream_is_a_no_op_when_destination_is_not_youtube():
+    validate_youtube_stream({"destination": "none"})  # must not raise
+
+def test_validate_youtube_stream_requires_ingest_url_env():
+    with pytest.raises(ConfigError):
+        validate_youtube_stream({"destination": "youtube", "key_env": "YOUTUBE_STREAM_KEY"})
+
+def test_validate_youtube_stream_requires_key_env():
+    with pytest.raises(ConfigError):
+        validate_youtube_stream({"destination": "youtube", "ingest_url_env": "YOUTUBE_INGEST_URL"})
+
+def test_validate_youtube_stream_rejects_non_positive_bitrate():
+    spec = {"destination": "youtube", "ingest_url_env": "YOUTUBE_INGEST_URL",
+            "key_env": "YOUTUBE_STREAM_KEY", "bitrate_kbps": 0}
+    with pytest.raises(ConfigError):
+        validate_youtube_stream(spec)
+
+def test_validate_youtube_stream_accepts_a_complete_spec():
+    spec = {"destination": "youtube", "ingest_url_env": "YOUTUBE_INGEST_URL",
+            "key_env": "YOUTUBE_STREAM_KEY", "bitrate_kbps": 3000}
+    validate_youtube_stream(spec)  # must not raise
+
+def test_youtube_stream_missing_ingest_url_env_rejected_by_load_config(tmp_path):
+    bad = VALID_YAML.replace('  ingest_url_env: "YOUTUBE_INGEST_URL"\n', "")
     with pytest.raises(ConfigError):
         _load(tmp_path, bad)
