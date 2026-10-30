@@ -1,0 +1,33 @@
+services:
+  wyze-bridge:
+    image: mrlt8/wyze-bridge:2.10.3
+    ports:
+      - "127.0.0.1:8554:8554"
+      - "127.0.0.1:5050:5000"
+    environment:
+      WB_AUTH: "true"
+      # WB_USERNAME and WB_PASSWORD: set via the bridge's own web UI on
+      # first login instead of here (see README).
+      API_ID: ${WYZE_KEY_ID}
+      API_KEY: ${WYZE_API_KEY}
+      WB_API: ${WYZE_API_KEY}
+    networks:
+      - brewcam-net
+
+  brewcam:
+    build: .
+    depends_on:
+      - wyze-bridge
+    environment:
+      CAMERA_SOURCE: ${CAMERA_SOURCE}
+      BREWCAM_CONFIG: ${BREWCAM_CONFIG}
+    volumes:
+      - ./config:/app/config
+      - ./runtime:/app/runtime
+      - ./logs:/app/logs
+      - ./assets:/app/assets
+    networks:
+      - brewcam-net
+
+networks:
+  brewcam-net:
