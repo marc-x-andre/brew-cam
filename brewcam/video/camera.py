@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 _SECRET_QUERY_TERMS = ("token", "key", "pass", "secret")
@@ -34,3 +35,17 @@ def redact_url(url: str) -> str:
 def _is_secret_param(name: str) -> bool:
     lowered = name.lower()
     return any(term in lowered for term in _SECRET_QUERY_TERMS)
+
+
+def build_snapshot_command(rtsp_url: str, snapshot_path: Path) -> list[str]:
+    return [
+        "ffmpeg",
+        "-rtsp_transport", "tcp",
+        "-rw_timeout", "10000000",
+        "-i", rtsp_url,
+        "-an",
+        "-vf", "fps=1/5",
+        "-update", "1",
+        "-y",
+        str(snapshot_path),
+    ]
