@@ -10,7 +10,7 @@ def build_compose_command(display_source, rtsp_url, overlay_text_path, stream_co
         command += ["-f", "lavfi", "-i", f"color=c=black:s={width}x{height}:r={fps}"]
     filter_chain = (
         f"scale={width}:{height},"
-        f"drawtext=textfile={overlay_text_path}:reload=1:fontcolor=white:fontsize=24:"
+        f"drawtext=textfile={overlay_text_path}:reload=1:expansion=none:fontcolor=white:fontsize=24:"
         "x=20:y=20:box=1:boxcolor=black@0.5"
     )
     command += ["-vf", filter_chain, "-an", "-pix_fmt", "yuv420p", "-r", "1/5", "-update", "1", "-y", str(snapshot_path)]

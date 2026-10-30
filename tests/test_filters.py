@@ -34,3 +34,4 @@ def test_filter_chain_scales_and_reloads_overlay_text():
     assert "scale=1280:720" in vf
     assert f"textfile={TEXT_PATH}" in vf
     assert "reload=1" in vf
+    assert "expansion=none" in vf
