@@ -15,6 +15,7 @@ class VideoState:
     next_restart_at: datetime | None = None
     process_started_at: datetime | None = None
     connected_since: datetime | None = None
+    running_source: dict | None = None
 
 
 def backoff_seconds(failure_count: int) -> float:

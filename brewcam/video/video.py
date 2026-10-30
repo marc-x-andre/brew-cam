@@ -2,32 +2,65 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-from brewcam.video.camera import build_snapshot_command
-from brewcam.video.starter import start_if_due
+from brewcam.config import SessionConfig
+from brewcam.schedule import StageState
+from brewcam.video import background
+from brewcam.video.starter import start_camera_attempt, start_filler
 from brewcam.video.state import VideoState
 from brewcam.video.supervisor import watch_running_process
 
-__all__ = ["VideoState", "build_snapshot_command", "tick", "stop"]
+__all__ = ["VideoState", "tick", "stop"]
 
 
 def tick(
     state: VideoState,
     camera_config: dict,
+    stream_config: dict,
+    session: SessionConfig,
+    schedule_state: StageState,
+    overlay_text_path: Path,
     snapshot_path: Path,
     now: datetime,
     now_local: datetime,
     monitoring_dir: str,
     retention_days: int,
 ) -> dict:
-    if state.process is None:
-        start_if_due(state, camera_config, snapshot_path, now, now_local, monitoring_dir, retention_days)
-    else:
-        watch_running_process(state, snapshot_path, now, now_local, monitoring_dir, retention_days)
+    configured_mode = background.resolve_configured_mode(session, schedule_state)
+    camera_retry_due = state.next_restart_at is None or now >= state.next_restart_at
 
-    return {
-        "background_mode": "camera" if state.status == "connected" else "black",
-        "ffmpeg_running": state.process is not None,
-    }
+    if configured_mode["mode"] == "camera":
+        desired = (
+            {"mode": "camera"}
+            if (state.running_source == {"mode": "camera"} or camera_retry_due)
+            else {"mode": "black"}
+        )
+    else:
+        desired = configured_mode
+
+    if state.running_source == {"mode": "camera"} and desired == {"mode": "camera"}:
+        watch_running_process(state, snapshot_path, now, now_local, monitoring_dir, retention_days)
+        if state.process is None:  # just failed/stalled this tick — keep the preview fresh immediately
+            fallback = {"mode": "black"} if configured_mode["mode"] == "camera" else configured_mode
+            start_filler(
+                state, fallback, stream_config, overlay_text_path, snapshot_path,
+                now_local, monitoring_dir, retention_days,
+            )
+    elif state.running_source != desired or (state.process is not None and state.process.poll() is not None):
+        if state.process is not None:
+            stop(state)
+        if desired["mode"] == "camera":
+            start_camera_attempt(
+                state, camera_config, stream_config, overlay_text_path, snapshot_path,
+                now, now_local, monitoring_dir, retention_days,
+            )
+        else:
+            start_filler(
+                state, desired, stream_config, overlay_text_path, snapshot_path,
+                now_local, monitoring_dir, retention_days,
+            )
+
+    display_source = background.resolve_display_source(configured_mode, state.status)
+    return {"background_mode": display_source["mode"], "ffmpeg_running": state.process is not None}
 
 
 def stop(state: VideoState) -> None:
