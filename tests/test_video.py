@@ -436,6 +436,81 @@ def test_process_exit_with_youtube_leg_active_logs_streaming_failed_not_camera_d
     assert '"camera_disconnected"' not in logged
 
 
+def test_first_ever_connection_with_youtube_leg_logs_streaming_started_not_recovered(tmp_path, monkeypatch):
+    # A brand-new run's very first connection (failure_count == 0, nothing has ever
+    # failed) must be reported as streaming_started, not streaming_recovered —
+    # "recovered" implies a prior tracked failure that never happened here.
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    monkeypatch.setenv("YOUTUBE_INGEST_URL", "rtmps://a.rtmps.youtube.com/live2")
+    monkeypatch.setenv("YOUTUBE_STREAM_KEY", "k")
+    snapshot_path = tmp_path / "snap.jpg"
+    process = _running_process()
+    state = VideoState(process=process, status="connecting", process_started_at=NOW,
+                        running_source={"mode": "camera"})
+    assert state.failure_count == 0
+    snapshot_path.write_bytes(b"jpg")
+    os.utime(snapshot_path, (NOW.timestamp() + 1, NOW.timestamp() + 1))
+    tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt", snapshot_path,
+         NOW + timedelta(seconds=2), NOW + timedelta(seconds=2), str(tmp_path / "logs"), 30)
+    assert state.status == "connected"
+    logged = "\n".join(p.read_text() for p in (tmp_path / "logs").glob("*.jsonl"))
+    assert '"streaming_started"' in logged
+    assert '"streaming_recovered"' not in logged
+
+
+def test_streaming_failure_retry_and_recovery_sequence_with_youtube_leg(tmp_path, monkeypatch):
+    # Regression for a review finding: streaming_recovered must only fire after a
+    # genuinely tracked failure (failure_count > 0 at the moment of reconnection).
+    # This drives a real failure -> retry -> recovery sequence through tick() and
+    # pins streaming_retry's payload shape along the way.
+    monkeypatch.setenv("CAMERA_SOURCE", "rtsp://wyze-bridge:8554/cam1")
+    monkeypatch.setenv("YOUTUBE_INGEST_URL", "rtmps://a.rtmps.youtube.com/live2")
+    monkeypatch.setenv("YOUTUBE_STREAM_KEY", "k")
+    snapshot_path = tmp_path / "snap.jpg"
+    log_dir = tmp_path / "logs"
+    exited_process = MagicMock(poll=MagicMock(return_value=1), stderr=MagicMock(read=MagicMock(return_value=b"")))
+    state = VideoState(process=exited_process, status="connected", process_started_at=NOW, connected_since=NOW,
+                        failure_count=0, running_source={"mode": "camera"})
+
+    # Tick 1: the camera process has died -> streaming_failed + streaming_retry;
+    # the same-tick black-filler fallback fires too, so its Popen must be mocked.
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None),
+                                             stderr=MagicMock(read=MagicMock(return_value=b"")))
+        tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+             snapshot_path, NOW + timedelta(seconds=1), NOW + timedelta(seconds=1), str(log_dir), 30)
+    logged_records = [
+        json.loads(line) for p in log_dir.glob("*.jsonl") for line in p.read_text().splitlines()
+    ]
+    event_types = [r["event_type"] for r in logged_records]
+    assert "streaming_failed" in event_types
+    assert "streaming_retry" in event_types
+    retry_details = next(r["details"] for r in logged_records if r["event_type"] == "streaming_retry")
+    assert "delay_seconds" in retry_details
+    assert state.failure_count == 1
+    restart_at = state.next_restart_at
+
+    # Tick 2 (backoff elapsed): camera is retried.
+    with patch("brewcam.video.starter.subprocess.Popen") as mock_popen:
+        mock_popen.return_value = MagicMock(poll=MagicMock(return_value=None),
+                                             stderr=MagicMock(read=MagicMock(return_value=b"")))
+        tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+             snapshot_path, restart_at, restart_at, str(log_dir), 30)
+    assert state.running_source == {"mode": "camera"}
+
+    # Tick 3: a fresh frame arrives -> the reconnection is a genuine recovery
+    # (failure_count is still 1 at this point) -> streaming_recovered.
+    snapshot_path.write_bytes(b"jpg")
+    fresh_mtime = state.process_started_at.timestamp() + 1
+    os.utime(snapshot_path, (fresh_mtime, fresh_mtime))
+    even_later = restart_at + timedelta(seconds=2)
+    tick(state, CAMERA_CONFIG, STREAM_YOUTUBE, SESSION, SCHEDULE_ACTIVE, tmp_path / "overlay.txt",
+         snapshot_path, even_later, even_later, str(log_dir), 30)
+    assert state.status == "connected"
+    logged = "\n".join(p.read_text() for p in log_dir.glob("*.jsonl"))
+    assert '"streaming_recovered"' in logged
+
+
 # --- start_camera_attempt / start_filler (Task 4, Step 2) ---
 
 

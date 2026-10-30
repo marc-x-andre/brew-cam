@@ -77,7 +77,8 @@ def watch_running_process(
             state.connected_since = now
             monitoring.write_event(monitoring_dir, now_local, "camera_connected", {}, retention_days)
             if youtube_leg_was_active:
-                monitoring.write_event(monitoring_dir, now_local, "streaming_recovered", {}, retention_days)
+                event_name = "streaming_recovered" if state.failure_count > 0 else "streaming_started"
+                monitoring.write_event(monitoring_dir, now_local, event_name, {}, retention_days)
         elif (now - state.connected_since).total_seconds() >= HEALTHY_RESET_SECONDS:
             state.failure_count = 0
         return
