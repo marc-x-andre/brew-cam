@@ -1,0 +1,38 @@
+session:
+  name: "Brassin maison"
+  timezone: "America/Toronto"
+  background: {mode: camera}
+  before: {mode: black}
+  after: {mode: image, path: assets/standby.png}
+
+steps:
+  - name: "Empâtage"
+    description: "Extraction des sucres"
+    start: "2026-11-07T09:00:00-05:00"
+    end: "2026-11-07T10:30:00-05:00"
+    target_temperature_c: 67
+  - name: "Fermentation"
+    description: "Suivi du brassin"
+    start: "2026-11-07T10:30:00-05:00"
+    end: "2026-11-21T10:30:00-05:00"
+    background: {mode: image, path: assets/standby.png}
+
+camera:
+  source_env: "CAMERA_SOURCE"
+sensors:
+  temperature:
+    enabled: true
+    driver: simulated   # thermopro après validation du modèle
+    stale_after_seconds: 120
+stream:
+  destination: youtube
+  key_env: "YOUTUBE_STREAM_KEY"
+  width: 1280
+  height: 720
+  fps: 25
+overlays:
+  enabled: [session, temperature, stage, progress]
+monitoring:
+  interval_seconds: 60
+  directory: logs
+  retention_days: 30
