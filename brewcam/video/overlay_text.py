@@ -8,6 +8,7 @@ def render_overlay_text(overlay: OverlayData) -> str:
     return "\n".join(
         [
             overlay.session_name,
+            f"Time: {overlay.time_display}",
             f"{overlay.stage_name} - {overlay.stage_description}",
             f"Temperature: {overlay.temperature_display}",
             f"Stage: {overlay.stage_progress_pct:.0f}%  Overall: {overlay.overall_progress_pct:.0f}%",

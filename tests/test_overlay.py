@@ -77,7 +77,7 @@ def test_build_overlay_active_stage_with_available_temperature(tmp_path):
     config = _load(tmp_path)
     state = compute_schedule_state(config.steps, config.steps[0].start)
     reading = SensorReading("temp", 20.0, "C", config.steps[0].start, "available")
-    overlay = build_overlay(config, state, reading)
+    overlay = build_overlay(config, state, reading, config.steps[0].start)
     assert overlay.session_name == config.session.name
     assert overlay.stage_name == "Mash"
     assert overlay.temperature_display == "20.0C"
@@ -88,7 +88,7 @@ def test_build_overlay_shows_unavailable_temperature(tmp_path):
     config = _load(tmp_path)
     state = compute_schedule_state(config.steps, config.steps[0].start)
     reading = SensorReading("temp", None, "C", None, "unavailable")
-    overlay = build_overlay(config, state, reading)
+    overlay = build_overlay(config, state, reading, config.steps[0].start)
     assert overlay.temperature_display == "Unavailable"
 
 
@@ -98,7 +98,7 @@ def test_build_overlay_shows_unavailable_temperature_for_stale_reading(tmp_path)
     config = _load(tmp_path)
     state = compute_schedule_state(config.steps, config.steps[0].start)
     reading = SensorReading("temp", 20.0, "C", config.steps[0].start - timedelta(minutes=10), "stale")
-    overlay = build_overlay(config, state, reading)
+    overlay = build_overlay(config, state, reading, config.steps[0].start)
     assert overlay.temperature_display == "Unavailable"
 
 
@@ -106,9 +106,18 @@ def test_build_overlay_before_first_step_has_no_stage_name(tmp_path):
     config = _load(tmp_path)
     state = compute_schedule_state(config.steps, config.steps[0].start - timedelta(hours=1))
     reading = SensorReading("temp", None, "C", None, "unavailable")
-    overlay = build_overlay(config, state, reading)
+    overlay = build_overlay(config, state, reading, config.steps[0].start)
     assert overlay.status_label == "upcoming"
     assert overlay.stage_name == ""
+
+
+def test_build_overlay_time_display_formats_now_as_hh_mm_ss(tmp_path):
+    config = _load(tmp_path)
+    state = compute_schedule_state(config.steps, config.steps[0].start)
+    reading = SensorReading("temp", 20.0, "C", config.steps[0].start, "available")
+    now = datetime(2026, 11, 7, 14, 32, 7, tzinfo=timezone.utc)
+    overlay = build_overlay(config, state, reading, now)
+    assert overlay.time_display == "14:32:07"
 
 
 def test_overlay_module_has_no_camera_or_youtube_dependency():

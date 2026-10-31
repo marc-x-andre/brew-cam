@@ -56,6 +56,7 @@ def write_snapshot(
     temperature: SensorReading,
 ) -> None:
     record = build_snapshot_record(now_local, overlay, video_status, temperature)
+    print(f"{record['timestamp']} status={record['event_type']}")
     jsonl.append_jsonl(directory, now_local.date(), record)
     jsonl.enforce_retention(directory, now_local.date(), retention_days)
 
@@ -68,5 +69,6 @@ def write_event(
     retention_days: int,
 ) -> None:
     record = build_event_record(now_local, event_type, details)
+    print(f"{record['timestamp']} status={record['event_type']}")
     jsonl.append_jsonl(directory, now_local.date(), record)
     jsonl.enforce_retention(directory, now_local.date(), retention_days)

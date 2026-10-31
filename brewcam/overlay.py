@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime
 
 from brewcam.config import BrewcamConfig
 from brewcam.schedule import StageState
@@ -14,10 +15,11 @@ class OverlayData:
     stage_progress_pct: float
     overall_progress_pct: float
     temperature_display: str
+    time_display: str
 
 
 def build_overlay(
-    config: BrewcamConfig, schedule_state: StageState, temperature: SensorReading
+    config: BrewcamConfig, schedule_state: StageState, temperature: SensorReading, now: datetime
 ) -> OverlayData:
     stage = schedule_state.stage
     if temperature.status == "available":
@@ -34,4 +36,5 @@ def build_overlay(
         stage_progress_pct=schedule_state.stage_progress_pct,
         overall_progress_pct=schedule_state.overall_progress_pct,
         temperature_display=temperature_display,
+        time_display=now.strftime("%H:%M:%S"),
     )

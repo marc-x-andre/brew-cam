@@ -48,7 +48,7 @@ def run(config_path: str) -> None:
             reading = simulated.read_temperature(
                 now, config.sensors["temperature"]["stale_after_seconds"]
             )
-            overlay = build_overlay(config, state, reading)
+            overlay = build_overlay(config, state, reading, now_local)
             overlay_text.write_overlay_text(overlay_text_path, overlay_text.render_overlay_text(overlay))
             video_status = video.tick(
                 video_state,

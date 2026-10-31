@@ -13,7 +13,7 @@ from brewcam.overlay import OverlayData
 from brewcam.sensors import SensorReading
 
 NOW = datetime(2026, 11, 7, 9, 20, tzinfo=timezone.utc)
-OVERLAY = OverlayData("Test Brew", "Mash", "desc", "active", 10.0, 5.0, "20.0C")
+OVERLAY = OverlayData("Test Brew", "Mash", "desc", "active", 10.0, 5.0, "20.0C", "14:32:07")
 TEMPERATURE = SensorReading("temperature", 20.0, "C", NOW, "available")
 
 
@@ -125,3 +125,22 @@ def test_write_event_appends_immediately(tmp_path):
     write_event(str(tmp_path), NOW, "error", {"message": "sensor timeout"}, retention_days=30)
     lines = (tmp_path / "2026-11-07.jsonl").read_text().splitlines()
     assert json.loads(lines[0])["event_type"] == "error"
+
+
+def test_write_snapshot_prints_timestamp_and_status(tmp_path, capsys):
+    write_snapshot(
+        str(tmp_path), NOW, OVERLAY,
+        {"background_mode": "black", "ffmpeg_running": False,
+         "youtube": {"configured": False, "leg_active": False}},
+        retention_days=30, temperature=TEMPERATURE,
+    )
+    out = capsys.readouterr().out
+    assert NOW.isoformat() in out
+    assert "snapshot" in out
+
+
+def test_write_event_prints_timestamp_and_status(tmp_path, capsys):
+    write_event(str(tmp_path), NOW, "shutdown", {}, retention_days=30)
+    out = capsys.readouterr().out
+    assert NOW.isoformat() in out
+    assert "shutdown" in out
