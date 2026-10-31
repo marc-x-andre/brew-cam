@@ -1,7 +1,7 @@
 def build_compose_command(display_source, rtsp_url, overlay_text_path, stream_config, snapshot_path, youtube_target=None):
     width, height, fps = stream_config["width"], stream_config["height"], stream_config["fps"]
     mode = display_source["mode"]
-    command = ["ffmpeg"]
+    command = ["ffmpeg", "-nostats", "-loglevel", "error"]
     if mode == "camera":
         command += ["-rtsp_transport", "tcp", "-timeout", "10000000", "-i", rtsp_url]
     elif mode == "image":
@@ -12,10 +12,11 @@ def build_compose_command(display_source, rtsp_url, overlay_text_path, stream_co
     if youtube_target is not None:
         command += ["-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]
 
+    split_suffix = ",split=2[comp][yt]" if youtube_target is not None else "[comp]"
     filter_graph = (
         f"[0:v]scale={width}:{height},"
         f"drawtext=textfile={overlay_text_path}:reload=1:expansion=none:fontcolor=white:fontsize=24:"
-        "x=20:y=20:box=1:boxcolor=black@0.5[comp]"
+        f"x=20:y=20:box=1:boxcolor=black@0.5{split_suffix}"
     )
     command += ["-filter_complex", filter_graph]
     command += ["-map", "[comp]", "-an", "-pix_fmt", "yuv420p", "-r", "1/5", "-update", "1", "-y", str(snapshot_path)]
@@ -24,7 +25,7 @@ def build_compose_command(display_source, rtsp_url, overlay_text_path, stream_co
         bitrate = stream_config.get("bitrate_kbps", 3000)
         gop = str(2 * fps)
         command += [
-            "-map", "[comp]", "-map", "1:a",
+            "-map", "[yt]", "-map", "1:a",
             "-c:v", "libx264", "-profile:v", "main", "-pix_fmt", "yuv420p",
             "-b:v", f"{bitrate}k", "-minrate", f"{bitrate}k", "-maxrate", f"{bitrate}k",
             "-bufsize", f"{bitrate * 2}k",

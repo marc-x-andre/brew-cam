@@ -45,6 +45,20 @@ def test_no_youtube_leg_when_target_is_none():
     cmd = build_compose_command({"mode": "black"}, None, TEXT_PATH, STREAM, SNAPSHOT)
     assert "anullsrc" not in " ".join(cmd)
     assert cmd[-1] == str(SNAPSHOT)
+    assert "split" not in " ".join(cmd)
+
+
+def test_youtube_target_splits_the_composited_pad_for_both_outputs():
+    cmd = build_compose_command({"mode": "black"}, None, TEXT_PATH, STREAM, SNAPSHOT, youtube_target=TARGET)
+    filter_graph = cmd[cmd.index("-filter_complex") + 1]
+    assert "split=2[comp][yt]" in filter_graph
+    # the JPEG leg still maps [comp]
+    assert cmd[cmd.index("-map") + 1] == "[comp]"
+    # the YouTube leg's video map (immediately preceding the "1:a" audio map) targets [yt], not [comp]
+    audio_map_index = cmd.index("1:a")
+    assert cmd[audio_map_index - 1] == "-map"
+    assert cmd[audio_map_index - 2] == "[yt]"
+    assert cmd[audio_map_index - 3] == "-map"
 
 
 def test_youtube_leg_adds_silent_audio_and_required_encoder_settings():
