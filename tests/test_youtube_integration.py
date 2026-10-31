@@ -31,8 +31,20 @@ def test_youtube_encoding_leg_produces_a_valid_flv_locally(tmp_path):
     command = build_compose_command({"mode": "black"}, None, overlay_path,
                                      {"width": 320, "height": 240, "fps": 10}, snapshot_path,
                                      youtube_target=local_target)
-    process = subprocess.Popen(command + ["-t", "2"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    process.wait(timeout=10)
+    # Insert "-t 2" as an output-level option for each output leg (right before that
+    # leg's own terminal filename/flags), not appended after the whole command -- ffmpeg
+    # treats a trailing "-t" as ignored, which would leave the lavfi source running forever.
+    snapshot_index = command.index(str(snapshot_path))
+    command = command[:snapshot_index] + ["-t", "2"] + command[snapshot_index:]
+    flv_index = command.index(local_target.rtmps_url)
+    command = command[:flv_index] + ["-t", "2"] + command[flv_index:]
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        process.wait(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=5)
     output_path = tmp_path / "local_output" / "out.flv"
     assert output_path.exists() and output_path.stat().st_size > 0
     probe = subprocess.run(
