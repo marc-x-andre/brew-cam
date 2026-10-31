@@ -163,10 +163,10 @@ YouTube leg.
 3. In Studio's stream health panel, confirm YouTube reports it is receiving
    video; open the unlisted broadcast URL and confirm picture and overlay look
    right.
-4. Briefly interrupt the stream (stop/restart Brewcam, or network access) and
-   confirm the JSONL log shows `streaming_failed` → `streaming_retry` →
-   `streaming_recovered`, and that Studio shows a real gap, not seamless
-   playback.
+4. Briefly interrupt network connectivity (or kill the running `ffmpeg`
+   process directly, leaving Brewcam running) and confirm the JSONL log shows
+   `streaming_failed` → `streaming_retry` → `streaming_recovered`, and that
+   Studio shows a real gap, not seamless playback.
 5. Stop Brewcam with Ctrl+C; confirm the broadcast ends cleanly in Studio and
    no FFmpeg process is left running.
 
@@ -176,8 +176,9 @@ YouTube leg.
   plain RTMP instead of RTMPS. Re-copy both the URL and the stream key fresh
   from Studio.
 - **Encoding errors:** look for a `streaming_failed` event in the day's JSONL
-  log. Its `details.excerpt` field holds a redacted `ffmpeg` stderr excerpt
-  showing what FFmpeg reported.
+  log. When ffmpeg exits on its own, its `details.excerpt` field holds a
+  redacted `ffmpeg` stderr excerpt showing what FFmpeg reported. A
+  stall-triggered `streaming_failed` has no excerpt.
 - **An interrupted stream:** expect `streaming_failed` followed by
   `streaming_retry` events with growing backoff, then `streaming_recovered`
   once reconnected. Studio will show a gap during reconnection. This is
