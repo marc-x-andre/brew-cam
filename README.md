@@ -184,6 +184,11 @@ YouTube leg.
   once reconnected. Studio will show a gap during reconnection. This is
   expected, not a bug: Brewcam does not claim uninterrupted playback while
   reconnecting.
+- **A YouTube leg failure during `black`/image fallback mode:** unlike the
+  camera path, filler mode restarts immediately without the
+  `streaming_failed`/`streaming_retry` backoff and events. This is a known,
+  narrow limitation (filler mode has never had backoff, even before YouTube
+  publishing existed), not a bug.
 
 ## Status
 
