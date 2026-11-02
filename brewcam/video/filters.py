@@ -19,7 +19,7 @@ def build_compose_command(display_source, rtsp_url, overlay_text_path, stream_co
         f"x=20:y=20:box=1:boxcolor=black@0.5{split_suffix}"
     )
     command += ["-filter_complex", filter_graph]
-    command += ["-map", "[comp]", "-an", "-pix_fmt", "yuv420p", "-r", "1/5", "-update", "1", "-y", str(snapshot_path)]
+    command += ["-map", "[comp]", "-an", "-pix_fmt", "yuv420p", "-r", "1", "-update", "1", "-y", str(snapshot_path)]
 
     if youtube_target is not None:
         bitrate = stream_config.get("bitrate_kbps", 3000)

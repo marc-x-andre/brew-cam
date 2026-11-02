@@ -7,7 +7,7 @@ from brewcam.schedule import compute_schedule_state
 
 def _step(name, h1, h2):
     return Step(name, "d", datetime(2026, 11, 7, h1, tzinfo=timezone.utc),
-                datetime(2026, 11, 7, h2, tzinfo=timezone.utc), None, None)
+                datetime(2026, 11, 7, h2, tzinfo=timezone.utc), None)
 
 
 STEPS = [_step("A", 9, 10), _step("B", 10, 12)]
@@ -56,10 +56,10 @@ def test_schedule_handles_dst_crossing_steps():
     # must compare them correctly in UTC regardless of the offset change.
     before_fallback = Step("Before", "d",
         datetime(2026, 11, 1, 1, 0, tzinfo=tz(timedelta(hours=-4))),
-        datetime(2026, 11, 1, 1, 30, tzinfo=tz(timedelta(hours=-4))), None, None)
+        datetime(2026, 11, 1, 1, 30, tzinfo=tz(timedelta(hours=-4))), None)
     after_fallback = Step("After", "d",
         datetime(2026, 11, 1, 1, 30, tzinfo=tz(timedelta(hours=-4))),
-        datetime(2026, 11, 1, 1, 30, tzinfo=tz(timedelta(hours=-5))), None, None)
+        datetime(2026, 11, 1, 1, 30, tzinfo=tz(timedelta(hours=-5))), None)
     steps = [before_fallback, after_fallback]
     now = datetime(2026, 11, 1, 1, 15, tzinfo=tz(timedelta(hours=-5)))  # inside "After" in UTC terms
     state = compute_schedule_state(steps, now)

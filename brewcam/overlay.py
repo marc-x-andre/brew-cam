@@ -29,7 +29,7 @@ def build_overlay(
         # stale reading must never display as current.
         temperature_display = "Unavailable"
     return OverlayData(
-        session_name=config.session.name,
+        session_name=stage.name if stage is not None else "Between steps",
         stage_name=stage.name if stage is not None else "",
         stage_description=stage.description if stage is not None else "",
         status_label=schedule_state.status,

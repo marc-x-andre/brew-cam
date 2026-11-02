@@ -35,12 +35,7 @@ def test_thermopro_driver_not_yet_implemented():
 
 
 VALID_YAML = textwrap.dedent("""
-session:
-  name: "Test Brew"
-  timezone: "America/Toronto"
-  background: {mode: black}
-  before: {mode: black}
-  after: {mode: black}
+timezone: "America/Toronto"
 steps:
   - name: "Mash"
     description: "desc"
@@ -59,7 +54,7 @@ stream:
   height: 720
   fps: 25
 overlays:
-  enabled: [session, temperature, stage, progress]
+  enabled: [temperature, stage, progress]
 monitoring:
   interval_seconds: 60
   directory: logs
@@ -78,7 +73,7 @@ def test_build_overlay_active_stage_with_available_temperature(tmp_path):
     state = compute_schedule_state(config.steps, config.steps[0].start)
     reading = SensorReading("temp", 20.0, "C", config.steps[0].start, "available")
     overlay = build_overlay(config, state, reading, config.steps[0].start)
-    assert overlay.session_name == config.session.name
+    assert overlay.session_name == "Mash"
     assert overlay.stage_name == "Mash"
     assert overlay.temperature_display == "20.0C"
     assert overlay.status_label == "active"
@@ -109,6 +104,7 @@ def test_build_overlay_before_first_step_has_no_stage_name(tmp_path):
     overlay = build_overlay(config, state, reading, config.steps[0].start)
     assert overlay.status_label == "upcoming"
     assert overlay.stage_name == ""
+    assert overlay.session_name == "Between steps"
 
 
 def test_build_overlay_time_display_formats_now_as_hh_mm_ss(tmp_path):

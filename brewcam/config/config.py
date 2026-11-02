@@ -6,7 +6,6 @@ import yaml
 
 from .validation import (
     ConfigError,
-    validate_background_mode,
     validate_step_sequence,
     validate_stream_dimensions,
     validate_timezone_offset,
@@ -21,21 +20,11 @@ class Step:
     start: datetime
     end: datetime
     target_temperature_c: float | None
-    background: dict | None
-
-
-@dataclass(frozen=True)
-class SessionConfig:
-    name: str
-    timezone: str
-    background: dict
-    before: dict
-    after: dict
 
 
 @dataclass(frozen=True)
 class BrewcamConfig:
-    session: SessionConfig
+    timezone: str
     steps: list[Step]
     camera: dict
     sensors: dict
@@ -59,23 +48,14 @@ def _build_step(step_raw: dict) -> Step:
         start=_parse_timestamp(step_raw["start"]),
         end=_parse_timestamp(step_raw["end"]),
         target_temperature_c=float(target) if target is not None else None,
-        background=step_raw.get("background"),
     )
 
 
 def load_config(path: str) -> BrewcamConfig:
     try:
         raw = yaml.safe_load(Path(path).read_text())
-        session_raw = raw["session"]
-        session = SessionConfig(
-            name=session_raw["name"],
-            timezone=session_raw["timezone"],
-            background=session_raw["background"],
-            before=session_raw["before"],
-            after=session_raw["after"],
-        )
         config = BrewcamConfig(
-            session=session,
+            timezone=raw["timezone"],
             steps=[_build_step(step_raw) for step_raw in raw["steps"]],
             camera=raw["camera"],
             sensors=raw["sensors"],
@@ -86,13 +66,9 @@ def load_config(path: str) -> BrewcamConfig:
         validate_step_sequence([(step.start, step.end) for step in config.steps])
         validate_stream_dimensions(config.stream)
         validate_youtube_stream(config.stream)
-        for background_spec in (config.session.background, config.session.before, config.session.after):
-            validate_background_mode(background_spec)
         for step in config.steps:
-            if step.background is not None:
-                validate_background_mode(step.background)
-            validate_timezone_offset(step.start, config.session.timezone)
-            validate_timezone_offset(step.end, config.session.timezone)
+            validate_timezone_offset(step.start, config.timezone)
+            validate_timezone_offset(step.end, config.timezone)
     except (KeyError, TypeError, ValueError, yaml.YAMLError) as exc:
         raise ConfigError(f"malformed config at {path}: {exc}") from exc
 

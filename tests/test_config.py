@@ -1,10 +1,8 @@
 import textwrap
 from datetime import datetime, timedelta, timezone
 import pytest
-from pathlib import Path
 from brewcam.config.validation import (
     ConfigError,
-    validate_background_mode,
     validate_step_sequence,
     validate_stream_dimensions,
     validate_timezone_offset,
@@ -42,29 +40,8 @@ def test_wrong_offset_during_dst_rejected():
     with pytest.raises(ConfigError):
         validate_timezone_offset(moment, "America/Toronto")
 
-def test_known_mode_without_path_passes():
-    validate_background_mode({"mode": "black"})
-
-def test_unknown_mode_rejected():
-    with pytest.raises(ConfigError):
-        validate_background_mode({"mode": "bogus"})
-
-def test_image_mode_missing_file_rejected(tmp_path):
-    with pytest.raises(ConfigError):
-        validate_background_mode({"mode": "image", "path": "nope.png"}, assets_dir=tmp_path)
-
-def test_image_mode_existing_file_passes(tmp_path):
-    (tmp_path / "pic.png").write_bytes(b"\x89PNG")
-    validate_background_mode({"mode": "image", "path": "pic.png"}, assets_dir=tmp_path)
-
-
 VALID_YAML = textwrap.dedent("""
-session:
-  name: "Test Brew"
-  timezone: "America/Toronto"
-  background: {mode: black}
-  before: {mode: black}
-  after: {mode: black}
+timezone: "America/Toronto"
 steps:
   - name: "Mash"
     description: "desc"
@@ -83,7 +60,7 @@ stream:
   height: 720
   fps: 25
 overlays:
-  enabled: [session, temperature, stage, progress]
+  enabled: [temperature, stage, progress]
 monitoring:
   interval_seconds: 60
   directory: logs
@@ -94,7 +71,7 @@ def test_load_config_happy_path(tmp_path):
     cfg_path = tmp_path / "session.yaml"
     cfg_path.write_text(VALID_YAML)
     config = load_config(str(cfg_path))
-    assert config.session.name == "Test Brew"
+    assert config.timezone == "America/Toronto"
     assert len(config.steps) == 1
     assert config.steps[0].name == "Mash"
     assert config.camera["source_env"] == "CAMERA_SOURCE"
@@ -122,13 +99,8 @@ def test_zero_length_step_rejected(tmp_path):
     with pytest.raises(ConfigError):
         _load(tmp_path, bad)
 
-def test_unknown_background_mode_rejected(tmp_path):
-    bad = VALID_YAML.replace("background: {mode: black}", "background: {mode: bogus}")
-    with pytest.raises(ConfigError):
-        _load(tmp_path, bad)
-
-def test_image_background_missing_path_rejected(tmp_path):
-    bad = VALID_YAML.replace("background: {mode: black}", "background: {mode: image}", 1)
+def test_missing_timezone_rejected(tmp_path):
+    bad = VALID_YAML.replace('timezone: "America/Toronto"\n', "")
     with pytest.raises(ConfigError):
         _load(tmp_path, bad)
 

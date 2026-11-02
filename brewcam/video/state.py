@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 UNAVAILABLE_RETRY_SECONDS = 60
-STALL_TIMEOUT_SECONDS = 15
+STALL_TIMEOUT_SECONDS = 5
 HEALTHY_RESET_SECONDS = 60
 
 
@@ -17,6 +17,8 @@ class VideoState:
     connected_since: datetime | None = None
     running_source: dict | None = None
     degraded_mode: dict | None = None
+    probe_process: subprocess.Popen | None = None
+    probe_started_at: datetime | None = None
     youtube_error_logged: bool = False
 
 

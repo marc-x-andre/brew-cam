@@ -1,9 +1,4 @@
-session:
-  name: "Brassin maison"
-  timezone: "America/Toronto"
-  background: {mode: camera}
-  before: {mode: black}
-  after: {mode: image, path: assets/standby.png}
+timezone: "America/Toronto"
 
 steps:
   - name: "Empâtage"
@@ -15,7 +10,6 @@ steps:
     description: "Suivi du brassin"
     start: "2026-11-07T10:30:00-05:00"
     end: "2026-11-21T10:30:00-05:00"
-    background: {mode: image, path: assets/standby.png}
 
 camera:
   source_env: "CAMERA_SOURCE"
@@ -33,7 +27,7 @@ stream:
   height: 720
   fps: 25
 overlays:
-  enabled: [session, temperature, stage, progress]
+  enabled: [temperature, stage, progress]
 monitoring:
   interval_seconds: 60
   directory: logs

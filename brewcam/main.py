@@ -26,7 +26,7 @@ def run(config_path: str) -> None:
     signal.signal(signal.SIGINT, _handle_sigint)
     signal.signal(signal.SIGTERM, _handle_sigint)
 
-    tz = ZoneInfo(config.session.timezone)
+    tz = ZoneInfo(config.timezone)
     interval_seconds = config.monitoring["interval_seconds"]
     last_snapshot_at = None
     now_local = utc_now().astimezone(tz)
@@ -54,8 +54,6 @@ def run(config_path: str) -> None:
                 video_state,
                 config.camera,
                 config.stream,
-                config.session,
-                state,
                 overlay_text_path,
                 snapshot_path,
                 now,

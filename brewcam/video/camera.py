@@ -47,7 +47,7 @@ def build_snapshot_command(rtsp_url: str, snapshot_path: Path) -> list[str]:
         "-timeout", "10000000",
         "-i", rtsp_url,
         "-an",
-        "-vf", "fps=1/5",
+        "-vf", "fps=1",
         "-update", "1",
         "-y",
         str(snapshot_path),

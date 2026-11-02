@@ -44,7 +44,7 @@ def leg_was_active(running_source: dict | None, stream_config: dict) -> bool:
     """Best-effort check, for the clean-shutdown path, of whether a YouTube leg was
     attached to the just-stopped process. Degrades to False on misconfiguration,
     matching resolve_or_degrade's degrade pattern."""
-    if running_source != {"mode": "camera"}:
+    if not running_source:
         return False
     try:
         return resolve_youtube_target(stream_config) is not None

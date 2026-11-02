@@ -66,7 +66,7 @@ def watch_running_process(
         mtime = snapshot_path.stat().st_mtime
         is_fresh = (
             mtime > state.process_started_at.timestamp()
-            and (now.timestamp() - mtime) <= STALL_TIMEOUT_SECONDS
+            and (now.timestamp() - mtime) < STALL_TIMEOUT_SECONDS
         )
     except OSError:
         pass  # file missing or briefly unreadable mid-write — treat as not-yet-fresh
@@ -84,7 +84,7 @@ def watch_running_process(
         return
 
     connecting_elapsed = (now - state.process_started_at).total_seconds()
-    if state.status == "connected" or connecting_elapsed > STALL_TIMEOUT_SECONDS:
+    if state.status == "connected" or connecting_elapsed >= STALL_TIMEOUT_SECONDS:
         state.process.terminate()
         state.process = None
         state.status = "stalled"

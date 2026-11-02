@@ -1,5 +1,4 @@
 from datetime import datetime
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
@@ -28,15 +27,6 @@ def validate_timezone_offset(moment: datetime, tz_name: str) -> None:
             f"{moment.isoformat()} has offset {moment.utcoffset()}, "
             f"but {tz_name} is {expected} at that instant"
         )
-
-
-def validate_background_mode(spec: dict, assets_dir: Path | None = None) -> None:
-    assets_dir = assets_dir if assets_dir is not None else Path.cwd()
-    mode = spec["mode"]
-    if mode not in {"camera", "image", "black"}:
-        raise ConfigError(f"unknown background mode {mode!r}")
-    if mode == "image" and not (assets_dir / spec["path"]).is_file():
-        raise ConfigError(f"background image {spec['path']!r} not found in {assets_dir}")
 
 
 def validate_stream_dimensions(spec: dict) -> None:
