@@ -2,8 +2,8 @@ services:
   wyze-bridge:
     image: mrlt8/wyze-bridge:2.10.3
     ports:
-      - "127.0.0.1:8554:8554"
-      - "127.0.0.1:5050:5000"
+      - "8554:8554"
+      - "5050:5000"
     environment:
       WB_AUTH: "true"
       # WB_USERNAME and WB_PASSWORD: set via the bridge's own web UI on
